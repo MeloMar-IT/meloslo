@@ -13,12 +13,14 @@ import jakarta.persistence.ManyToMany;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.OneToMany;
 import jakarta.persistence.Table;
-import jakarta.persistence.Transient;
+import com.example.meloslo.util.EncryptionConverter;
+import jakarta.persistence.*;
 import jakarta.validation.constraints.NotBlank;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 
 @Entity
 @Table(name = "openslo_records")
@@ -44,6 +46,7 @@ public class OpenSlo {
 
     @NotBlank
     @Column(columnDefinition = "TEXT")
+    @Convert(converter = EncryptionConverter.class)
     private String spec;
 
     private String department;
@@ -54,9 +57,11 @@ public class OpenSlo {
     
     private LocalDateTime lastRefreshTime;
 
+    @Convert(converter = EncryptionConverter.class)
     private String alertUrl;
 
     @Column(columnDefinition = "TEXT")
+    @Convert(converter = EncryptionConverter.class)
     private String alertPayload;
 
     private LocalDateTime lastAlertTime;

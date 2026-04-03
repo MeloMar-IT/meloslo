@@ -37,14 +37,16 @@ class UserControllerUnitTest {
 
     @Test
     @WithMockUser(username = "testuser")
-    void shouldGetCurrentUser() throws Exception {
+    void shouldGetCurrentUserAndNotReturnPassword() throws Exception {
         User user = new User();
         user.setUsername("testuser");
+        user.setPassword("encodedPassword");
         when(userRepository.findByUsername("testuser")).thenReturn(Optional.of(user));
 
         mockMvc.perform(get("/api/v1/users/me"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.username").value("testuser"));
+                .andExpect(jsonPath("$.username").value("testuser"))
+                .andExpect(jsonPath("$.password").doesNotExist());
     }
 
     @Test
