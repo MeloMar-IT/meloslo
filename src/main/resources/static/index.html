@@ -1,0 +1,2745 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MeloSlo | OpenSLO Management</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Vue.js 3 -->
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Google Fonts: Inter -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <!-- ApexCharts -->
+    <script src="https://cdn.jsdelivr.net/npm/apexcharts"></script>
+    <!-- Prism.js for syntax highlighting -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css" rel="stylesheet" />
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-yaml.min.js"></script>
+    <!-- JS-YAML for parsing spec -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/js-yaml/4.1.0/js-yaml.min.js"></script>
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        .sidebar-active { border-left: 4px solid #3b82f6; background-color: #eff6ff; color: #1e40af; }
+        pre[class*="language-"] { margin: 0; border-radius: 0.75rem; }
+        [v-cloak] { display: none; }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-900">
+    <div id="app" v-cloak>
+        <!-- Login Screen -->
+        <div v-if="!isAuthenticated" class="min-h-screen flex items-center justify-center bg-slate-100 py-12 px-4 sm:px-6 lg:px-8">
+            <div class="max-w-md w-full space-y-8 p-10 bg-white rounded-2xl shadow-xl border border-slate-200">
+                <div class="text-center">
+                    <div class="mx-auto h-12 w-12 bg-blue-600 rounded-xl flex items-center justify-center text-white text-2xl font-bold mb-4 shadow-lg shadow-blue-200">M</div>
+                    <h2 class="text-3xl font-extrabold text-slate-900">Welcome to MeloSlo</h2>
+                    <p class="mt-2 text-sm text-slate-600">Please sign in to manage your SLOs</p>
+                </div>
+                <form class="mt-8 space-y-6" @submit.prevent="handleLogin">
+                    <div class="rounded-md shadow-sm -space-y-px">
+                        <div class="mb-4">
+                            <label for="username" class="block text-sm font-medium text-slate-700 mb-1">Username</label>
+                            <input v-model="loginForm.username" id="username" name="username" type="text" required 
+                                   class="appearance-none rounded-lg relative block w-full px-3 py-3 border border-slate-300 placeholder-slate-400 text-slate-900 focus:outline-none focus:ring-blue-500 focus:border-blue-500 focus:z-10 sm:text-sm" 
+                                   placeholder="Username">
+                        </div>
+                        <div>
+                            <label for="password" class="block text-sm font-medium text-slate-700 mb-1">Password</label>
+                            <input v-model="loginForm.password" id="password" name="password" type="password" required 
+                                   class="appearance-none rounded-lg relative block w-full px-3 py-3 border border-slate-300 placeholder-slate-400 text-slate-900 focus:outline-none focus:ring-blue-500 focus:border-blue-500 focus:z-10 sm:text-sm" 
+                                   placeholder="Password">
+                        </div>
+                    </div>
+
+                    <div v-if="loginError" class="text-red-500 text-sm text-center font-medium bg-red-50 py-2 rounded-lg border border-red-100">
+                        {{ loginError }}
+                    </div>
+
+                    <div>
+                        <button type="submit" :disabled="isLoggingIn"
+                                class="group relative w-full flex justify-center py-3 px-4 border border-transparent text-sm font-bold rounded-lg text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-all shadow-md hover:shadow-lg disabled:opacity-50">
+                            <span v-if="isLoggingIn">
+                                <i class="fas fa-spinner fa-spin mr-2"></i> Signing in...
+                            </span>
+                            <span v-else>Sign in</span>
+                        </button>
+                    </div>
+                </form>
+                <div class="text-center mt-6">
+                    <p class="text-xs text-slate-400">Professional OpenSLO Management Platform</p>
+                </div>
+            </div>
+        </div>
+
+        <div v-else class="flex h-screen overflow-hidden">
+            <!-- Sidebar -->
+            <aside class="w-64 bg-white border-r border-slate-200 flex-shrink-0 hidden md:flex flex-col">
+                <div class="p-6 flex items-center space-x-2">
+                    <div class="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center text-white font-bold">M</div>
+                    <span class="text-xl font-bold text-slate-800">MeloSlo</span>
+                </div>
+                <nav class="flex-1 px-4 space-y-1 mt-4">
+                    <a href="#" class="flex items-center space-x-3 px-3 py-2 rounded-lg text-slate-600 hover:bg-slate-50 transition-colors"
+                       :class="{ 'sidebar-active': currentView === 'dashboard' }" @click="currentView = 'dashboard'">
+                        <i class="fas fa-th-large w-5"></i>
+                        <span class="font-medium">Dashboard</span>
+                    </a>
+                    <a href="#" class="flex items-center space-x-3 px-3 py-2 rounded-lg text-slate-600 hover:bg-slate-50 transition-colors"
+                       :class="{ 'sidebar-active': currentView === 'services' }" @click="currentView = 'services'">
+                        <i class="fas fa-layer-group w-5"></i>
+                        <span class="font-medium">Services</span>
+                    </a>
+                    <a href="#" class="flex items-center space-x-3 px-3 py-2 rounded-lg text-slate-600 hover:bg-slate-50 transition-colors"
+                       :class="{ 'sidebar-active': currentView === 'slos' }" @click="currentView = 'slos'">
+                        <i class="fas fa-chart-line w-5"></i>
+                        <span class="font-medium">SLOs</span>
+                    </a>
+                    <a href="#" class="flex items-center space-x-3 px-3 py-2 rounded-lg text-slate-600 hover:bg-slate-50 transition-colors"
+                       :class="{ 'sidebar-active': currentView === 'slis' }" @click="currentView = 'slis'">
+                        <i class="fas fa-gauge-high w-5"></i>
+                        <span class="font-medium">SLIs</span>
+                    </a>
+                    <a href="#" class="flex items-center space-x-3 px-3 py-2 rounded-lg text-slate-600 hover:bg-slate-50 transition-colors"
+                       :class="{ 'sidebar-active': currentView === 'datasources' }" @click="currentView = 'datasources'">
+                        <i class="fas fa-database w-5"></i>
+                        <span class="font-medium">Data Sources</span>
+                    </a>
+                    <a href="#" class="flex items-center space-x-3 px-3 py-2 rounded-lg text-slate-600 hover:bg-slate-50 transition-colors"
+                       :class="{ 'sidebar-active': currentView === 'alerting' }" @click="currentView = 'alerting'">
+                        <i class="fas fa-bell w-5"></i>
+                        <span class="font-medium">Alerting</span>
+                    </a>
+                    <a href="#" class="flex items-center space-x-3 px-3 py-2 rounded-lg text-slate-600 hover:bg-slate-50 transition-colors"
+                       :class="{ 'sidebar-active': currentView === 'reports' }" @click="currentView = 'reports'">
+                        <i class="fas fa-file-pdf w-5"></i>
+                        <span class="font-medium">Reports</span>
+                    </a>
+                    <a href="#" class="flex items-center space-x-3 px-3 py-2 rounded-lg text-slate-600 hover:bg-slate-50 transition-colors"
+                       :class="{ 'sidebar-active': currentView === 'docs' }" @click="currentView = 'docs'">
+                        <i class="fas fa-book w-5"></i>
+                        <span class="font-medium">Documentation</span>
+                    </a>
+                    <a href="#" class="flex items-center space-x-3 px-3 py-2 rounded-lg text-slate-600 hover:bg-slate-50 transition-colors"
+                       :class="{ 'sidebar-active': currentView === 'query' }" @click="currentView = 'query'" v-if="isAdmin">
+                        <i class="fas fa-terminal w-5"></i>
+                        <span class="font-medium">Query Tool</span>
+                    </a>
+                    <a href="#" class="flex items-center space-x-3 px-3 py-2 rounded-lg text-slate-600 hover:bg-slate-50 transition-colors"
+                       :class="{ 'sidebar-active': currentView === 'users' }" @click="currentView = 'users'" v-if="isAdmin">
+                        <i class="fas fa-users-cog w-5"></i>
+                        <span class="font-medium">User Admin</span>
+                    </a>
+                    <a href="#" class="flex items-center space-x-3 px-3 py-2 rounded-lg text-slate-600 hover:bg-slate-50 transition-colors" @click="handleLogout">
+                        <i class="fas fa-sign-out-alt w-5"></i>
+                        <span class="font-medium">Logout</span>
+                    </a>
+                </nav>
+                <div class="p-4 border-t border-slate-200">
+                    <div class="flex items-center space-x-3 px-3 py-2">
+                        <div class="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 font-bold">
+                            {{ currentUser ? currentUser.username.charAt(0).toUpperCase() : 'U' }}
+                        </div>
+                        <div class="flex-1 min-w-0">
+                            <p class="text-sm font-medium text-slate-900 truncate">{{ currentUser ? currentUser.username : 'User' }}</p>
+                            <p class="text-xs text-slate-500 truncate">{{ currentUser ? (currentUser.departments || 'Administrator') : '' }}</p>
+                        </div>
+                    </div>
+                </div>
+            </aside>
+
+            <!-- Main Content -->
+            <main class="flex-1 overflow-y-auto bg-slate-50">
+                <!-- Topbar -->
+                <header class="bg-white border-b border-slate-200 h-16 flex items-center justify-between px-8 sticky top-0 z-10">
+                    <h1 class="text-xl font-semibold text-slate-800">{{ viewTitle }}</h1>
+                    <div class="flex items-center space-x-4">
+                        <button class="px-4 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors shadow-sm text-sm" @click="openCreateModal">
+                            <i class="fas fa-plus mr-2"></i> Create SLO
+                        </button>
+                    </div>
+                </header>
+
+                <div class="p-8">
+                    <!-- Dashboard View -->
+                    <div v-if="currentView === 'dashboard'">
+                        <div class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-6 mb-8">
+                            <div class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+                                <div class="flex items-center justify-between mb-4">
+                                    <h3 class="text-slate-500 font-medium text-sm">Services</h3>
+                                    <span class="p-2 bg-blue-50 text-blue-600 rounded-lg"><i class="fas fa-layer-group"></i></span>
+                                </div>
+                                <p class="text-3xl font-bold text-slate-800">{{ dashboardStats.totalServices }}</p>
+                            </div>
+                            <div class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+                                <div class="flex items-center justify-between mb-4">
+                                    <h3 class="text-slate-500 font-medium text-sm">Total SLOs</h3>
+                                    <span class="p-2 bg-indigo-50 text-indigo-600 rounded-lg"><i class="fas fa-chart-line"></i></span>
+                                </div>
+                                <p class="text-3xl font-bold text-slate-800">{{ dashboardStats.totalSlos }}</p>
+                            </div>
+                            <div class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+                                <div class="flex items-center justify-between mb-4">
+                                    <h3 class="text-slate-500 font-medium text-sm">Healthy</h3>
+                                    <span class="p-2 bg-green-50 text-green-600 rounded-lg"><i class="fas fa-check-circle"></i></span>
+                                </div>
+                                <p class="text-3xl font-bold text-slate-800">{{ healthyCount }}</p>
+                            </div>
+                            <div class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+                                <div class="flex items-center justify-between mb-4">
+                                    <h3 class="text-slate-500 font-medium text-sm">Warning</h3>
+                                    <span class="p-2 bg-yellow-50 text-yellow-600 rounded-lg"><i class="fas fa-exclamation-circle"></i></span>
+                                </div>
+                                <p class="text-3xl font-bold text-slate-800">{{ warningCount }}</p>
+                            </div>
+                            <div class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+                                <div class="flex items-center justify-between mb-4">
+                                    <h3 class="text-slate-500 font-medium text-sm">Breaching</h3>
+                                    <span class="p-2 bg-red-50 text-red-600 rounded-lg"><i class="fas fa-exclamation-triangle"></i></span>
+                                </div>
+                                <p class="text-3xl font-bold text-slate-800">{{ breachingCount }}</p>
+                            </div>
+                        </div>
+
+                        <!-- Recent Activity / Overview Table -->
+                        <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                            <div class="p-6 border-b border-slate-200 flex items-center justify-between">
+                                <h3 class="font-bold text-slate-800">Recently Updated SLOs</h3>
+                            </div>
+                            <table class="w-full text-left">
+                                <thead class="bg-slate-50 border-b border-slate-200">
+                                    <tr>
+                                        <th class="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">SLO Name</th>
+                                        <th class="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Service</th>
+                                        <th class="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Value</th>
+                                        <th class="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Status</th>
+                                        <th class="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider text-right">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="divide-y divide-slate-200">
+                                    <tr v-for="slo in slos.slice(0, 5)" :key="slo.id" class="hover:bg-slate-50 transition-colors cursor-pointer" @click="viewDetails(slo)">
+                                        <td class="px-6 py-4">
+                                            <div class="font-medium text-slate-900">{{ slo.displayName || slo.name }}</div>
+                                        </td>
+                                        <td class="px-6 py-4">
+                                            <span class="text-sm text-slate-600">{{ slo.service ? (slo.service.displayName || slo.service.name) : 'None' }}</span>
+                                        </td>
+                                        <td class="px-6 py-4">
+                                            <span class="text-sm font-bold text-slate-700">
+                                                {{ slo.currentValue ? (slo.currentValue * 100).toFixed(3) : 'N/A' }}%
+                                            </span>
+                                        </td>
+                                        <td class="px-6 py-4">
+                                            <span class="flex items-center" :class="getStatusClass(slo)">
+                                                <i class="fas fa-circle text-[8px] mr-2"></i>
+                                                <span class="text-sm font-medium">{{ getStatusText(slo) }}</span>
+                                            </span>
+                                        </td>
+                                        <td class="px-6 py-4 text-right" @click.stop>
+                                            <button class="text-slate-400 hover:text-blue-600 transition-colors" @click="openEditModal(slo)">
+                                                <i class="fas fa-edit"></i>
+                                            </button>
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- Services View -->
+                    <div v-if="currentView === 'services'" class="space-y-6">
+                        <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                            <div class="p-6 border-b border-slate-200 flex items-center justify-between">
+                                <h3 class="font-bold text-slate-800">All Services</h3>
+                            </div>
+                            <table class="w-full text-left">
+                                <thead class="bg-slate-50 border-b border-slate-200">
+                                    <tr>
+                                        <th class="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Service Name</th>
+                                        <th class="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">SLOs</th>
+                                        <th class="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Current Value</th>
+                                        <th class="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Status</th>
+                                        <th class="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Description</th>
+                                        <th class="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider text-right">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="divide-y divide-slate-200">
+                                    <tr v-for="service in services" :key="service.id" class="hover:bg-slate-50 transition-colors cursor-pointer" @click="viewServiceDetails(service)">
+                                        <td class="px-6 py-4 font-medium text-slate-900">{{ service.displayName || service.name }}</td>
+                                        <td class="px-6 py-4">
+                                            <span class="px-2 py-1 bg-blue-50 text-blue-600 rounded-md text-xs font-bold">
+                                                {{ service.slos ? service.slos.length : 0 }} SLOs
+                                            </span>
+                                        </td>
+                                        <td class="px-6 py-4">
+                                            <span class="text-sm font-bold text-slate-700">
+                                                {{ service.currentValue ? (service.currentValue * 100).toFixed(3) : '100.000' }}%
+                                            </span>
+                                        </td>
+                                        <td class="px-6 py-4">
+                                            <span class="flex items-center" :class="getStatusClass(service)">
+                                                <i class="fas fa-circle text-[8px] mr-2"></i>
+                                                <span class="text-sm font-medium">{{ getStatusText(service) }}</span>
+                                            </span>
+                                        </td>
+                                        <td class="px-6 py-4 text-sm text-slate-500 truncate max-w-xs">{{ getSpecField(service.spec, 'description') || service.name }}</td>
+                                        <td class="px-6 py-4 text-right space-x-2" @click.stop>
+                                            <button class="text-slate-400 hover:text-blue-600 transition-colors" @click="openEditModal(service)">
+                                                <i class="fas fa-edit"></i>
+                                            </button>
+                                            <button class="text-slate-400 hover:text-red-600 transition-colors" @click="deleteSlo(service.id)">
+                                                <i class="fas fa-trash-alt"></i>
+                                            </button>
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- SLOs View -->
+                    <div v-if="currentView === 'slos'" class="space-y-6">
+                        <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                            <div class="p-6 border-b border-slate-200 flex items-center justify-between">
+                                <h3 class="font-bold text-slate-800">All SLOs</h3>
+                                <div class="relative">
+                                    <input type="text" placeholder="Search SLOs..." class="pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 w-64" v-model="searchQuery">
+                                    <i class="fas fa-search absolute left-3 top-2.5 text-slate-400 text-sm"></i>
+                                </div>
+                            </div>
+                            <table class="w-full text-left">
+                                <thead class="bg-slate-50 border-b border-slate-200">
+                                    <tr>
+                                        <th class="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Name</th>
+                                        <th class="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Service</th>
+                                        <th class="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Target / Window</th>
+                                        <th class="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Value</th>
+                                        <th class="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Status</th>
+                                        <th class="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider text-right">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="divide-y divide-slate-200">
+                                    <tr v-for="slo in filteredSlos" :key="slo.id" class="hover:bg-slate-50 transition-colors cursor-pointer" @click="viewDetails(slo)">
+                                        <td class="px-6 py-4">
+                                            <div class="font-medium text-slate-900">{{ slo.displayName || slo.name }}</div>
+                                            <div class="text-xs text-slate-500">{{ slo.name }}</div>
+                                        </td>
+                                        <td class="px-6 py-4">
+                                            <span class="text-sm text-slate-600">{{ slo.service ? (slo.service.displayName || slo.service.name) : 'None' }}</span>
+                                        </td>
+                                        <td class="px-6 py-4">
+                                            <div class="text-sm font-medium text-slate-700" v-if="getSpecField(slo.spec, 'objectives')">
+                                                {{ (getSpecField(slo.spec, 'objectives')[0].ratioMetrics?.target * 100) || 'N/A' }}% / 
+                                                {{ getSpecField(slo.spec, 'timeWindow') ? getSpecField(slo.spec, 'timeWindow')[0].duration : '30d' }}
+                                            </div>
+                                            <div class="text-xs text-slate-400" v-else>No objectives set</div>
+                                        </td>
+                                        <td class="px-6 py-4">
+                                            <span class="text-sm font-bold text-slate-700">
+                                                {{ slo.currentValue ? (slo.currentValue * 100).toFixed(3) : 'N/A' }}%
+                                            </span>
+                                        </td>
+                                        <td class="px-6 py-4">
+                                            <span class="flex items-center" :class="getStatusClass(slo)">
+                                                <i class="fas fa-circle text-[8px] mr-2"></i>
+                                                <span class="text-sm font-medium">{{ getStatusText(slo) }}</span>
+                                            </span>
+                                        </td>
+                                        <td class="px-6 py-4 text-right space-x-2" @click.stop>
+                                            <button class="text-slate-400 hover:text-blue-600 transition-colors" @click="openEditModal(slo)">
+                                                <i class="fas fa-edit"></i>
+                                            </button>
+                                            <button class="text-slate-400 hover:text-red-600 transition-colors" @click="deleteSlo(slo.id)">
+                                                <i class="fas fa-trash-alt"></i>
+                                            </button>
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- SLIs View -->
+                    <div v-if="currentView === 'slis'" class="space-y-6">
+                        <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                            <div class="p-6 border-b border-slate-200 flex items-center justify-between">
+                                <h3 class="font-bold text-slate-800">Service Level Indicators</h3>
+                            </div>
+                            <table class="w-full text-left">
+                                <thead class="bg-slate-50 border-b border-slate-200">
+                                    <tr>
+                                        <th class="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">SLI Name</th>
+                                        <th class="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Source Type</th>
+                                        <th class="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">DataSource</th>
+                                        <th class="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Query Snippet</th>
+                                        <th class="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider text-right">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="divide-y divide-slate-200">
+                                    <tr v-for="sli in slis" :key="sli.id" class="hover:bg-slate-50 transition-colors cursor-pointer" @click="viewSliDetails(sli)">
+                                        <td class="px-6 py-4 font-medium text-slate-900">
+                                            <div>{{ sli.displayName || sli.name }}</div>
+                                            <div class="text-xs text-slate-400">{{ sli.name }}</div>
+                                        </td>
+                                        <td class="px-6 py-4">
+                                            <div v-if="getMetricSources(sli.spec).length > 0" class="flex flex-wrap gap-1">
+                                                <span v-for="(ms, idx) in getMetricSources(sli.spec)" :key="idx" 
+                                                      class="px-2 py-0.5 bg-blue-50 text-blue-600 rounded text-[10px] font-bold uppercase">
+                                                    {{ ms.type }}
+                                                </span>
+                                            </div>
+                                            <span v-else class="px-2 py-1 bg-slate-100 text-slate-600 rounded text-xs font-medium">
+                                                {{ getSpecField(sli.spec, 'metricSource.type') || 'Custom' }}
+                                            </span>
+                                        </td>
+                                        <td class="px-6 py-4 text-sm text-slate-600">
+                                            {{ sli.datasource ? (sli.datasource.displayName || sli.datasource.name) : 'None' }}
+                                        </td>
+                                        <td class="px-6 py-4 text-sm text-slate-500 truncate max-w-xs">
+                                            <div v-if="getMetricSources(sli.spec).length > 0" class="space-y-1">
+                                                <div v-for="(ms, idx) in getMetricSources(sli.spec)" :key="idx" class="truncate">
+                                                    <code class="text-[10px] bg-slate-100 px-1 rounded">{{ ms.query || 'N/A' }}</code>
+                                                </div>
+                                            </div>
+                                            <code v-else>{{ getSpecField(sli.spec, 'metricSource.spec.query') || 'N/A' }}</code>
+                                        </td>
+                                        <td class="px-6 py-4 text-right space-x-2" @click.stop>
+                                            <button class="text-slate-400 hover:text-blue-600 transition-colors" @click="openEditModal(sli)">
+                                                <i class="fas fa-edit"></i>
+                                            </button>
+                                            <button class="text-slate-400 hover:text-red-600 transition-colors" @click="deleteSlo(sli.id)">
+                                                <i class="fas fa-trash-alt"></i>
+                                            </button>
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- SLI Details View -->
+                    <div v-if="currentView === 'sli-details'" class="space-y-6">
+                        <div class="flex items-center space-x-4 mb-6">
+                            <button @click="currentView = 'slis'" class="p-2 hover:bg-white rounded-lg transition-colors border border-transparent hover:border-slate-200 text-slate-600">
+                                <i class="fas fa-arrow-left"></i>
+                            </button>
+                            <h2 class="text-2xl font-bold text-slate-800">{{ selectedSli.displayName || selectedSli.name }}</h2>
+                        </div>
+                        
+                        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                            <div class="lg:col-span-2 space-y-6">
+                                <div class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+                                    <h3 class="font-bold text-slate-800 mb-4">Metric Performance</h3>
+                                    <div id="sli-chart"></div>
+                                </div>
+                                <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                                    <div class="p-6 border-b border-slate-200">
+                                        <h3 class="font-bold text-slate-800">Specification</h3>
+                                    </div>
+                                    <pre class="language-yaml"><code>{{ selectedSli.spec }}</code></pre>
+                                </div>
+                            </div>
+                            <div class="space-y-6">
+                                <div class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+                                    <h3 class="font-bold text-slate-800 mb-4">SLI Status</h3>
+                                    <div v-if="selectedSliReport" class="space-y-4">
+                                        <div class="flex justify-between items-center">
+                                            <span class="text-slate-500">Current Average:</span>
+                                            <span class="font-bold text-lg text-blue-600">
+                                                {{ (selectedSliReport.currentValue * 100).toFixed(3) }}%
+                                            </span>
+                                        </div>
+                                    </div>
+                                    <div v-else class="flex justify-center py-4">
+                                        <i class="fas fa-spinner fa-spin text-slate-300 text-2xl"></i>
+                                    </div>
+                                </div>
+
+                                <div class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+                                    <h3 class="font-bold text-slate-800 mb-4">Metric Data (Last 10)</h3>
+                                    <div v-if="selectedSliReport && selectedSliReport.recentMetrics.length > 0" class="overflow-hidden">
+                                        <table class="w-full text-left text-xs">
+                                            <thead class="bg-slate-50 text-slate-500">
+                                                <tr>
+                                                    <th class="py-2 px-2">Timestamp</th>
+                                                    <th class="py-2 px-2 text-right">Value</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody class="divide-y divide-slate-100">
+                                                <tr v-for="m in selectedSliReport.recentMetrics.slice(0, 10)" :key="m.id">
+                                                    <td class="py-2 px-2 text-slate-600">{{ new Date(m.timestamp).toLocaleString() }}</td>
+                                                    <td class="py-2 px-2 text-right font-medium">{{ (m.value * 100).toFixed(2) }}%</td>
+                                                </tr>
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                    <p v-else class="text-sm text-slate-400 text-center py-4">No recent metrics available</p>
+                                </div>
+
+                                <div class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+                                    <h3 class="font-bold text-slate-800 mb-4">Info</h3>
+                                    <div class="space-y-4">
+                                        <div>
+                                            <p class="text-xs text-slate-500 uppercase font-bold tracking-wider">API Version</p>
+                                            <p class="text-sm font-medium">{{ selectedSli.apiVersion }}</p>
+                                        </div>
+                                        <div>
+                                            <p class="text-xs text-slate-500 uppercase font-bold tracking-wider">Kind</p>
+                                            <p class="text-sm font-medium">{{ selectedSli.kind }}</p>
+                                        </div>
+                                        <div>
+                                            <p class="text-xs text-slate-500 uppercase font-bold tracking-wider">Department</p>
+                                            <p class="text-sm font-medium">{{ selectedSli.department || 'N/A' }}</p>
+                                        </div>
+                                        <div>
+                                            <p class="text-xs text-slate-500 uppercase font-bold tracking-wider">ITAL (Lead)</p>
+                                            <p class="text-sm font-medium">{{ selectedSli.ital || 'N/A' }}</p>
+                                        </div>
+                                        <div>
+                                            <p class="text-xs text-slate-500 uppercase font-bold tracking-wider">System Name</p>
+                                            <p class="text-sm font-medium">{{ selectedSli.name }}</p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Service Details View -->
+                    <div v-if="currentView === 'service-details'" class="space-y-6">
+                        <div class="flex items-center justify-between mb-6">
+                            <div class="flex items-center space-x-4">
+                                <button @click="currentView = 'services'" class="p-2 hover:bg-white rounded-lg transition-colors border border-transparent hover:border-slate-200 text-slate-600">
+                                    <i class="fas fa-arrow-left"></i>
+                                </button>
+                                <div>
+                                    <h2 class="text-2xl font-bold text-slate-800">{{ selectedService.displayName || selectedService.name }}</h2>
+                                    <p class="text-sm text-slate-500">Service Performance Overview</p>
+                                </div>
+                            </div>
+                            <div class="flex items-center space-x-3">
+                                <span class="px-3 py-1 bg-blue-50 text-blue-700 rounded-full text-xs font-bold border border-blue-100">
+                                    {{ selectedServiceReport ? selectedServiceReport.sloReports.length : 0 }} SLOs Linked
+                                </span>
+                            </div>
+                        </div>
+
+                        <div v-if="selectedServiceReport" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                            <div v-for="report in selectedServiceReport.sloReports" :key="report.name" class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm hover:shadow-md transition-shadow">
+                                <div class="flex justify-between items-start mb-4">
+                                    <div>
+                                        <h4 class="font-bold text-slate-800">{{ report.name }}</h4>
+                                        <p class="text-xs text-slate-500">Target: {{ (report.target * 100).toFixed(2) }}%</p>
+                                    </div>
+                                    <span :class="report.currentValue >= report.target ? 'text-green-600' : 'text-red-600'" class="flex items-center text-sm font-bold">
+                                        <i class="fas fa-circle text-[8px] mr-1.5"></i>
+                                        {{ (report.currentValue * 100).toFixed(3) }}%
+                                    </span>
+                                </div>
+                                
+                                <div class="space-y-3">
+                                    <div class="flex justify-between text-xs">
+                                        <span class="text-slate-500">Error Budget:</span>
+                                        <span :class="report.errorBudget > 0 ? 'text-blue-600' : 'text-red-600'" class="font-bold">
+                                            {{ report.errorBudget.toFixed(2) }}%
+                                        </span>
+                                    </div>
+                                    <div class="w-full bg-slate-100 rounded-full h-1.5 overflow-hidden">
+                                        <div class="h-full rounded-full transition-all duration-500" 
+                                             :class="report.errorBudget > 20 ? 'bg-blue-500' : (report.errorBudget > 0 ? 'bg-yellow-500' : 'bg-red-500')"
+                                             :style="{ width: Math.max(0, Math.min(100, report.errorBudget)) + '%' }"></div>
+                                    </div>
+                                    <div class="pt-2 flex justify-end">
+                                        <button @click="viewDetails(slos.find(s => s.name === report.name))" class="text-xs text-blue-600 font-medium hover:underline">
+                                            View Details <i class="fas fa-chevron-right ml-1"></i>
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div v-else class="flex flex-col items-center justify-center py-20 bg-white rounded-xl border border-slate-200 border-dashed">
+                            <i class="fas fa-spinner fa-spin text-slate-300 text-4xl mb-4"></i>
+                            <p class="text-slate-500 font-medium">Loading service metrics...</p>
+                        </div>
+
+                        <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                            <div class="p-6 border-b border-slate-200">
+                                <h3 class="font-bold text-slate-800">Service Specification</h3>
+                            </div>
+                            <pre class="language-yaml"><code>{{ selectedService.spec }}</code></pre>
+                        </div>
+                    </div>
+
+                    <!-- DataSources View -->
+                    <div v-if="currentView === 'datasources'" class="space-y-6">
+                        <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                            <div class="p-6 border-b border-slate-200 flex items-center justify-between">
+                                <h3 class="font-bold text-slate-800">All Data Sources</h3>
+                            </div>
+                            <table class="w-full text-left">
+                                <thead class="bg-slate-50 border-b border-slate-200">
+                                    <tr>
+                                        <th class="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Name</th>
+                                        <th class="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Type</th>
+                                        <th class="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Refresh Rate</th>
+                                        <th class="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Last Sync</th>
+                                        <th class="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Config URL</th>
+                                        <th class="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider text-right">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="divide-y divide-slate-200">
+                                    <tr v-for="ds in datasources" :key="ds.id" class="hover:bg-slate-50 transition-colors cursor-pointer" @click="openDsModal(ds)">
+                                        <td class="px-6 py-4 font-medium text-slate-900">
+                                            <div class="flex items-center space-x-2 text-blue-600 hover:text-blue-800 transition-colors">
+                                                <i class="fas fa-database text-slate-400"></i>
+                                                <span>{{ ds.displayName || ds.name }}</span>
+                                            </div>
+                                        </td>
+                                        <td class="px-6 py-4">
+                                            <span class="px-2 py-1 bg-slate-100 text-slate-600 rounded text-xs font-medium">
+                                                {{ getSpecField(ds.spec, 'type') || 'N/A' }}
+                                            </span>
+                                        </td>
+                                        <td class="px-6 py-4 text-sm text-slate-600">{{ ds.refreshRate || 60 }} min</td>
+                                        <td class="px-6 py-4 text-xs text-slate-500 italic">{{ ds.lastRefreshTime ? new Date(ds.lastRefreshTime).toLocaleString() : 'Never' }}</td>
+                                        <td class="px-6 py-4 text-sm text-slate-500">{{ getSpecField(ds.spec, 'config.url') || 'N/A' }}</td>
+                                        <td class="px-6 py-4 text-right space-x-2">
+                                            <button class="text-slate-400 hover:text-blue-600 transition-colors" @click.stop="openEditModal(ds)">
+                                                <i class="fas fa-edit"></i>
+                                            </button>
+                                            <button class="text-slate-400 hover:text-red-600 transition-colors" @click.stop="deleteSlo(ds.id)">
+                                                <i class="fas fa-trash-alt"></i>
+                                            </button>
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- Alerting View -->
+                    <div v-if="currentView === 'alerting'" class="space-y-6">
+                        <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                            <div class="p-6 border-b border-slate-200 flex items-center justify-between">
+                                <h3 class="font-bold text-slate-800">Alerting Sources</h3>
+                            </div>
+                            <table class="w-full text-left">
+                                <thead class="bg-slate-50 border-b border-slate-200">
+                                    <tr>
+                                        <th class="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Name</th>
+                                        <th class="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider text-center">URL</th>
+                                        <th class="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Department</th>
+                                        <th class="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">ITAL</th>
+                                        <th class="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider text-right">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="divide-y divide-slate-200">
+                                    <tr v-for="source in alertingSources" :key="source.id" class="hover:bg-slate-50 transition-colors cursor-pointer" @click="openDsModal(source)">
+                                        <td class="px-6 py-4 font-medium text-slate-900">
+                                            <div class="flex items-center space-x-2 text-blue-600 hover:text-blue-800 transition-colors">
+                                                <i class="fas fa-bell text-slate-400"></i>
+                                                <span>{{ source.displayName || source.name }}</span>
+                                            </div>
+                                        </td>
+                                        <td class="px-6 py-4 text-sm text-slate-500 truncate max-w-xs">{{ source.alertUrl }}</td>
+                                        <td class="px-6 py-4 text-sm text-slate-600">{{ source.department }}</td>
+                                        <td class="px-6 py-4 text-sm text-slate-600">{{ source.ital }}</td>
+                                        <td class="px-6 py-4 text-right space-x-2">
+                                            <button class="text-slate-400 hover:text-blue-600 transition-colors" @click.stop="openEditModal(source)">
+                                                <i class="fas fa-edit"></i>
+                                            </button>
+                                            <button class="text-slate-400 hover:text-red-600 transition-colors" @click.stop="deleteSlo(source.id)">
+                                                <i class="fas fa-trash-alt"></i>
+                                            </button>
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- Details View -->
+                    <div v-if="currentView === 'details'" class="space-y-6">
+                        <div class="flex items-center space-x-4 mb-6">
+                            <button @click="currentView = 'dashboard'" class="p-2 hover:bg-white rounded-lg transition-colors border border-transparent hover:border-slate-200 text-slate-600">
+                                <i class="fas fa-arrow-left"></i>
+                            </button>
+                            <h2 class="text-2xl font-bold text-slate-800">{{ selectedSlo.displayName || selectedSlo.name }}</h2>
+                        </div>
+                        
+                        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                            <div class="lg:col-span-2 space-y-6">
+                                <div class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+                                    <h3 class="font-bold text-slate-800 mb-4">Error Budget Burndown</h3>
+                                    <div id="chart"></div>
+                                </div>
+                                <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                                    <div class="p-6 border-b border-slate-200">
+                                        <h3 class="font-bold text-slate-800">Specification</h3>
+                                    </div>
+                                    <pre class="language-yaml"><code>{{ selectedSlo.spec }}</code></pre>
+                                </div>
+                            </div>
+                            <div class="space-y-6">
+                                <div class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+                                    <h3 class="font-bold text-slate-800 mb-4">SLO Status</h3>
+                                    <div v-if="selectedSloReport" class="space-y-4">
+                                        <div class="flex justify-between items-center">
+                                            <span class="text-slate-500">Status:</span>
+                                            <span class="flex items-center font-bold" :class="getStatusClass(selectedSloReport)">
+                                                <i class="fas fa-circle text-[8px] mr-2"></i>
+                                                {{ getStatusText(selectedSloReport) }}
+                                            </span>
+                                        </div>
+                                        <div class="flex justify-between items-center">
+                                            <span class="text-slate-500">Current Value:</span>
+                                            <span class="font-bold text-lg" :class="selectedSloReport.currentValue >= selectedSloReport.target ? 'text-green-600' : 'text-red-600'">
+                                                {{ (selectedSloReport.currentValue * 100).toFixed(3) }}%
+                                            </span>
+                                        </div>
+                                        <div class="flex justify-between items-center">
+                                            <span class="text-slate-500">Target:</span>
+                                            <span class="font-medium">{{ (selectedSloReport.target * 100).toFixed(2) }}%</span>
+                                        </div>
+                                        <div class="flex justify-between items-center">
+                                            <span class="text-slate-500">Error Budget:</span>
+                                            <span class="font-bold" :class="selectedSloReport.errorBudget >= 0 ? 'text-blue-600' : 'text-red-600'">
+                                                {{ selectedSloReport.errorBudget.toFixed(2) }}%
+                                            </span>
+                                        </div>
+                                        <div class="w-full bg-slate-100 rounded-full h-2 mt-2">
+                                            <div class="bg-blue-600 h-2 rounded-full" :style="{ width: Math.max(0, Math.min(100, selectedSloReport.errorBudget)) + '%' }"></div>
+                                        </div>
+                                    </div>
+                                    <div v-else class="flex justify-center py-4">
+                                        <i class="fas fa-spinner fa-spin text-slate-300 text-2xl"></i>
+                                    </div>
+                                </div>
+
+                                <div class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+                                    <h3 class="font-bold text-slate-800 mb-4">Recent Metrics</h3>
+                                    <div v-if="selectedSloReport && selectedSloReport.recentMetrics.length > 0" class="overflow-hidden">
+                                        <table class="w-full text-left text-xs">
+                                            <thead class="bg-slate-50 text-slate-500">
+                                                <tr>
+                                                    <th class="py-2 px-2">Timestamp</th>
+                                                    <th class="py-2 px-2 text-right">Value</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody class="divide-y divide-slate-100">
+                                                <tr v-for="m in selectedSloReport.recentMetrics.slice(0, 10)" :key="m.id">
+                                                    <td class="py-2 px-2 text-slate-600">{{ new Date(m.timestamp).toLocaleString() }}</td>
+                                                    <td class="py-2 px-2 text-right font-medium">{{ (m.value * 100).toFixed(2) }}%</td>
+                                                </tr>
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                    <p v-else class="text-sm text-slate-400 text-center py-4">No recent metrics available</p>
+                                </div>
+
+                                <div class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+                                    <h3 class="font-bold text-slate-800 mb-4">Info</h3>
+                                    <div class="space-y-4">
+                                        <div>
+                                            <p class="text-xs text-slate-500 uppercase font-bold tracking-wider">API Version</p>
+                                            <p class="text-sm font-medium">{{ selectedSlo.apiVersion }}</p>
+                                        </div>
+                                        <div>
+                                            <p class="text-xs text-slate-500 uppercase font-bold tracking-wider">Kind</p>
+                                            <p class="text-sm font-medium">{{ selectedSlo.kind }}</p>
+                                        </div>
+                                        <div>
+                                            <p class="text-xs text-slate-500 uppercase font-bold tracking-wider">Department</p>
+                                            <p class="text-sm font-medium">{{ selectedSlo.department || 'N/A' }}</p>
+                                        </div>
+                                        <div>
+                                            <p class="text-xs text-slate-500 uppercase font-bold tracking-wider">ITAL (Lead)</p>
+                                            <p class="text-sm font-medium">{{ selectedSlo.ital || 'N/A' }}</p>
+                                        </div>
+                                        <div>
+                                            <p class="text-xs text-slate-500 uppercase font-bold tracking-wider">System Name</p>
+                                            <p class="text-sm font-medium">{{ selectedSlo.name }}</p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Reports View -->
+                    <main v-if="currentView === 'reports'" class="flex-1 overflow-y-auto p-8 bg-slate-50">
+                        <div class="max-w-7xl mx-auto">
+                            <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 space-y-4 md:space-y-0">
+                                <div>
+                                    <h1 class="text-3xl font-bold text-slate-900">Annual Reports</h1>
+                                    <p class="text-slate-500 mt-1">Generate a 1-year performance report for your Services and SLOs</p>
+                                </div>
+                                <button @click="generateReport" :disabled="isGeneratingReport || selectedReportRecords.length === 0"
+                                        class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2.5 rounded-lg font-semibold flex items-center shadow-lg shadow-blue-200 transition-all disabled:opacity-50">
+                                    <i v-if="isGeneratingReport" class="fas fa-spinner fa-spin mr-2"></i>
+                                    <i v-else class="fas fa-file-pdf mr-2"></i>
+                                    Generate PDF Report
+                                </button>
+                            </div>
+
+                            <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                                <div class="p-6 border-b border-slate-100 bg-slate-50/50 flex justify-between items-center">
+                                    <h2 class="text-lg font-bold text-slate-800">Select Records to Include</h2>
+                                    <div class="text-sm font-medium text-slate-500">
+                                        {{ selectedReportRecords.length }} record(s) selected
+                                    </div>
+                                </div>
+                                <div class="overflow-x-auto">
+                                    <table class="w-full text-left">
+                                        <thead class="bg-slate-50 border-b border-slate-200">
+                                            <tr>
+                                                <th class="px-6 py-4 w-12 text-center">
+                                                    <input type="checkbox" @change="toggleSelectAllReports" :checked="isAllReportsSelected"
+                                                           class="rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer">
+                                                </th>
+                                                <th class="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Type</th>
+                                                <th class="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Display Name</th>
+                                                <th class="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">System ID</th>
+                                                <th class="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Department</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody class="divide-y divide-slate-100">
+                                            <tr v-for="record in reportableRecords" :key="record.id" class="hover:bg-slate-50 transition-colors cursor-pointer group" @click="toggleReportRecord(record.id)">
+                                                <td class="px-6 py-4 text-center" @click.stop>
+                                                    <input type="checkbox" v-model="selectedReportRecords" :value="record.id"
+                                                           class="rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer">
+                                                </td>
+                                                <td class="px-6 py-4">
+                                                    <span :class="{
+                                                        'bg-indigo-100 text-indigo-700 border-indigo-200': record.kind === 'Service',
+                                                        'bg-blue-100 text-blue-700 border-blue-200': record.kind === 'SLO'
+                                                    }" class="px-2.5 py-1 rounded-full text-xs font-bold uppercase tracking-wider border opacity-80">
+                                                        {{ record.kind }}
+                                                    </span>
+                                                </td>
+                                                <td class="px-6 py-4">
+                                                    <div class="font-semibold text-slate-800 group-hover:text-blue-600 transition-colors">{{ record.displayName }}</div>
+                                                </td>
+                                                <td class="px-6 py-4 font-mono text-xs text-slate-500">{{ record.name }}</td>
+                                                <td class="px-6 py-4 text-slate-600">{{ record.department }}</td>
+                                            </tr>
+                                            <tr v-if="reportableRecords.length === 0">
+                                                <td colspan="5" class="px-6 py-12 text-center text-slate-500">
+                                                    <i class="fas fa-layer-group text-4xl mb-3 block opacity-20"></i>
+                                                    No reportable records found.
+                                                </td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    </main>
+
+                    <!-- Documentation View -->
+                    <div v-if="currentView === 'docs'" class="space-y-8 animate__animated animate__fadeIn">
+                        <div class="bg-white p-8 rounded-2xl border border-slate-200 shadow-sm max-w-4xl mx-auto">
+                            <h2 class="text-3xl font-bold text-slate-800 mb-6">MeloSlo Documentation</h2>
+                            
+                            <section class="mb-10">
+                                <h3 class="text-xl font-bold text-blue-600 mb-4 flex items-center">
+                                    <i class="fas fa-info-circle mr-3"></i> What is OpenSLO?
+                                </h3>
+                                <p class="text-slate-600 leading-relaxed mb-4">
+                                    OpenSLO is an open-source specification for defining Service Level Objectives (SLOs) in a common, vendor-neutral format. It allows teams to define their reliability goals, error budgets, and indicators in a consistent way across different monitoring tools.
+                                </p>
+                                <div class="bg-slate-50 p-4 rounded-xl border border-slate-100">
+                                    <h4 class="font-bold text-sm text-slate-700 mb-2">Core Concepts:</h4>
+                                    <ul class="list-disc list-inside text-sm text-slate-600 space-y-2">
+                                        <li><strong>Service:</strong> A logical collection of SLOs.</li>
+                                        <li><strong>SLI (Indicator):</strong> A metric that tells you how your service is performing (e.g., Latency, Error Rate). <strong>Note:</strong> All metrics must be in the range <strong>0 to 100</strong>.</li>
+                                        <li><strong>SLO (Objective):</strong> A target value for an SLI over a specific time window. Multiple SLIs can be linked to a single SLO.</li>
+                                        <li><strong>Data Source:</strong> A record defining where metrics come from (e.g. Prometheus). Supports custom <strong>Refresh Rates</strong> (min 15m).</li>
+                                        <li><strong>Error Budget:</strong> The amount of unreliability you can afford before violating your SLO.</li>
+                                        <li><strong>Alerting Source:</strong> A record defining a webhook (e.g. Slack) to notify when an SLO is breached. Includes variables like <code>${SLO_NAME}</code> and 6h anti-spam.</li>
+                                        <li><strong>Status Thresholds:</strong> SLOs are <strong>Healthy</strong> (Budget &ge; 25%), <strong>Warning</strong> (0% to 25%), or <strong>Breaching</strong> (&lt; 0%).</li>
+                                    </ul>
+                                </div>
+                            </section>
+
+                            <section class="mb-10">
+                                <h3 class="text-xl font-bold text-blue-600 mb-4 flex items-center">
+                                    <i class="fas fa-lock mr-3"></i> Authentication and Access Control
+                                </h3>
+                                <div class="bg-slate-50 p-6 rounded-2xl border border-slate-100">
+                                    <p class="text-slate-600 text-sm mb-4">MeloSlo implements secure authentication and department-based access control.</p>
+                                    <div class="space-y-4">
+                                        <div class="flex items-start space-x-3">
+                                            <div class="w-8 h-8 bg-blue-100 text-blue-600 rounded-lg flex items-center justify-center flex-shrink-0">
+                                                <i class="fas fa-user-shield"></i>
+                                            </div>
+                                            <div>
+                                                <h4 class="font-bold text-slate-800 text-sm">Role: Administrator (Full Access)</h4>
+                                                <p class="text-[11px] text-slate-500">Users without an assigned department can see and manage all records across the entire application and access the User Admin and Database Query tools.</p>
+                                            </div>
+                                        </div>
+                                        <div class="flex items-start space-x-3">
+                                            <div class="w-8 h-8 bg-purple-100 text-purple-600 rounded-lg flex items-center justify-center flex-shrink-0">
+                                                <i class="fas fa-user-tag"></i>
+                                            </div>
+                                            <div>
+                                                <h4 class="font-bold text-slate-800 text-sm">Role: Restricted User</h4>
+                                                <p class="text-[11px] text-slate-500">Users can be assigned to one or more departments (separated by commas). They only see records belonging to any of those departments (e.g., 'Finance,Engineering').</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="mt-4 p-4 bg-white rounded-xl border border-slate-200">
+                                        <h4 class="font-bold text-xs text-slate-400 uppercase tracking-widest mb-2">Test Accounts:</h4>
+                                        <div class="grid grid-cols-2 gap-4 text-xs">
+                                            <div class="bg-slate-50 p-2 rounded-lg border border-slate-100">
+                                                <span class="font-bold text-slate-700">Admin:</span> admin / admin
+                                            </div>
+                                            <div class="bg-slate-50 p-2 rounded-lg border border-slate-100">
+                                                <span class="font-bold text-slate-700">Test (Finance & Engineering):</span> testuser / testuser
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </section>
+
+                            <section class="mb-10">
+                                <h3 class="text-xl font-bold text-blue-600 mb-4 flex items-center">
+                                    <i class="fas fa-laptop-code mr-3"></i> How to use MeloSlo
+                                </h3>
+                                <div class="space-y-6">
+                                    <div>
+                                        <h4 class="font-bold text-slate-800 mb-1">1. Create a Service</h4>
+                                        <p class="text-sm text-slate-600">Start by defining the Service that owns the reliability goals. Go to 'Services' and click 'Create'.</p>
+                                    </div>
+                                    <div>
+                                        <h4 class="font-bold text-slate-800 mb-1">2. Define Indicators (SLIs)</h4>
+                                        <p class="text-sm text-slate-600">Define how you measure performance. You can specify Prometheus queries or other metric sources in the YAML specification. <strong>Important:</strong> All metrics should be normalized between <strong>0 and 100</strong>.</p>
+                                    </div>
+                                    <div>
+                                        <h4 class="font-bold text-slate-800 mb-1">3. Set Objectives (SLOs)</h4>
+                                        <p class="text-sm text-slate-600">Link your Service and SLIs together and set target percentages. You can link multiple SLIs to a single SLO to monitor multiple performance indicators.</p>
+                                    </div>
+                                    <div>
+                                        <h4 class="font-bold text-slate-800 mb-1">4. Manage Metadata</h4>
+                                        <p class="text-sm text-slate-600">Each record can be tagged with a <strong>Department</strong> and an <strong>IT Area Lead (ITAL)</strong> to ensure clear ownership and accountability.</p>
+                                    </div>
+                                    <div>
+                                        <h4 class="font-bold text-slate-800 mb-1">5. Generate Reports</h4>
+                                        <p class="text-sm text-slate-600">Go to the 'Reports' view to generate professional annual PDF performance reports for your Services and SLOs. Gaps in data are automatically handled.</p>
+                                    </div>
+                                    <div>
+                                        <h4 class="font-bold text-slate-800 mb-1">6. Configure Alerting</h4>
+                                        <p class="text-sm text-slate-600">Create an 'Alerting Source' with your webhook URL and JSON payload. Then link it to your SLOs to get notified when they are breaching. Use <code>${SLO_NAME}</code>, <code>${SLO_STATUS}</code>, and <code>${SLO_VALUE}</code> variables.</p>
+                                    </div>
+                                    <div>
+                                        <h4 class="font-bold text-slate-800 mb-1">7. Database Maintenance</h4>
+                                        <p class="text-sm text-slate-600">Administrators can use the 'Query Tool' to run <code>SELECT</code> queries against the internal database to audit records or inspect table structures.</p>
+                                    </div>
+                                </div>
+                            </section>
+
+                            <section class="mb-10">
+                                <h3 class="text-xl font-bold text-blue-600 mb-4 flex items-center">
+                                    <i class="fas fa-check-double mr-3"></i> Startup Verification
+                                </h3>
+                                <div class="bg-blue-50/50 p-6 rounded-2xl border border-blue-100">
+                                    <p class="text-slate-600 text-sm leading-relaxed mb-4">
+                                        Upon startup, MeloSlo automatically verifies the state of the database to ensure it's in a consistent and healthy state for operations and reporting.
+                                    </p>
+                                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        <div class="bg-white p-3 rounded-xl border border-blue-100/50 flex items-start space-x-3">
+                                            <i class="fas fa-database text-blue-400 mt-1"></i>
+                                            <div>
+                                                <p class="text-xs font-bold text-slate-800 uppercase tracking-wider">Required Records</p>
+                                                <p class="text-[11px] text-slate-500">Ensures all essential sample records are present.</p>
+                                            </div>
+                                        </div>
+                                        <div class="bg-white p-3 rounded-xl border border-blue-100/50 flex items-start space-x-3">
+                                            <i class="fas fa-chart-area text-blue-400 mt-1"></i>
+                                            <div>
+                                                <p class="text-xs font-bold text-slate-800 uppercase tracking-wider">30 Days of Metrics</p>
+                                                <p class="text-[11px] text-slate-500">Confirms every SLI has a full month of data.</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <p class="text-[11px] text-amber-600 mt-4 font-medium flex items-center">
+                                        <i class="fas fa-sync-alt mr-2"></i> If verification fails, the system automatically reloads the test data from scratch.
+                                    </p>
+                                </div>
+                            </section>
+
+                            <section class="mb-10">
+                                <h3 class="text-xl font-bold text-blue-600 mb-4 flex items-center">
+                                    <i class="fas fa-file-code mr-3"></i> Sample Specification
+                                </h3>
+                                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div>
+                                        <h4 class="font-bold text-sm text-slate-700 mb-2">Standard SLO:</h4>
+                                        <pre class="language-yaml"><code>apiVersion: openslo/v1
+kind: SLO
+metadata:
+  name: api-availability
+spec:
+  service: my-service
+  description: 99.9% of requests must return 2xx or 3xx
+  indicator:
+    metricSource:
+      type: prometheus
+      spec:
+        query: sum(rate(http_requests_total{status=~"2..|3.."}[5m])) / sum(rate(http_requests_total[5m]))
+  objectives:
+    - ratioMetrics:
+        target: 0.999</code></pre>
+                                    </div>
+                                    <div>
+                                        <h4 class="font-bold text-sm text-slate-700 mb-2">SLI with Multiple Metric Sources:</h4>
+                                        <pre class="language-yaml"><code>apiVersion: openslo/v1
+kind: SLI
+metadata:
+  name: multi-cloud-latency
+spec:
+  metricSources:
+    - type: prometheus
+      spec:
+        query: histogram_quantile(0.95, sum(rate(http_duration_bucket{env="aws"}[5m])) by (le))
+    - type: datadog
+      spec:
+        query: avg:trace.http.request.duration{env:azure}.p95
+  description: Latency metrics from both AWS and Azure</code></pre>
+                                    </div>
+                                    <div class="md:col-span-2">
+                                        <h4 class="font-bold text-sm text-slate-700 mb-2">DataSource Template (Prometheus):</h4>
+                                        <pre class="language-yaml"><code>apiVersion: openslo/v1
+kind: DataSource
+metadata:
+  name: prometheus-datasource
+spec:
+  type: prometheus
+  config:
+    url: http://prometheus:9090
+# Note: Refresh rate (min 15m) is managed via the UI and database.</code></pre>
+                                    </div>
+                                </div>
+                            </section>
+
+                            <section class="mb-10">
+                                <h3 class="text-xl font-bold text-blue-600 mb-4 flex items-center">
+                                    <i class="fas fa-file-pdf mr-3"></i> Annual Performance Reports
+                                </h3>
+                                <p class="text-slate-600 mb-4">
+                                    MeloSlo allows you to generate professional PDF reports covering the performance of your Services and SLOs over the last 365 days.
+                                </p>
+                                <ul class="list-disc list-inside text-slate-600 space-y-2 ml-4">
+                                    <li><strong>Consolidated View</strong>: Select multiple Services or SLOs to include in a single report.</li>
+                                    <li><strong>Annual Performance</strong>: The report automatically calculates the average performance and error budget for the last year.</li>
+                                    <li><strong>Status Tracking</strong>: Includes health indicators (Healthy, Warning, Breaching) based on annual targets.</li>
+                                    <li><strong>Service Aggregation</strong>: Selecting a Service automatically includes all linked SLOs in the report.</li>
+                                </ul>
+                            </section>
+
+                            <section class="mb-10">
+                                <h3 class="text-xl font-bold text-blue-600 mb-4 flex items-center">
+                                    <i class="fas fa-network-wired mr-3"></i> REST API Reference
+                                </h3>
+                                <div class="bg-white p-1 rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                                    <p class="p-6 text-slate-600 text-sm border-b border-slate-100">
+                                        The MeloSlo API is accessible under the <code>/api/v1</code> base path. Click on any endpoint to view its details, usage, and JSON examples.
+                                    </p>
+                                    
+                                    <div class="divide-y divide-slate-100">
+                                        <div 
+                                            v-for="api in apiEndpoints" 
+                                            :key="api.path + api.method"
+                                            @click="openApiModal(api)"
+                                            class="p-4 hover:bg-slate-50 transition-colors flex items-center justify-between cursor-pointer group"
+                                        >
+                                            <div class="flex items-center space-x-4">
+                                                <span 
+                                                    class="px-2 py-0.5 rounded text-[10px] font-bold uppercase w-12 text-center"
+                                                    :class="{
+                                                        'bg-blue-100 text-blue-700': api.method === 'GET',
+                                                        'bg-green-100 text-green-700': api.method === 'POST',
+                                                        'bg-amber-100 text-amber-700': api.method === 'PUT',
+                                                        'bg-red-100 text-red-700': api.method === 'DELETE'
+                                                    }"
+                                                >
+                                                    {{ api.method }}
+                                                </span>
+                                                <code class="text-xs font-mono text-slate-700">{{ api.path }}</code>
+                                                <span class="text-xs text-slate-400 group-hover:text-slate-600 truncate max-w-xs md:max-w-md">{{ api.description }}</span>
+                                            </div>
+                                            <i class="fas fa-chevron-right text-[10px] text-slate-300 group-hover:text-blue-500 transition-colors"></i>
+                                        </div>
+                                    </div>
+                                </div>
+                            </section>
+
+                            <section>
+                                <h3 class="text-xl font-bold text-blue-600 mb-4 flex items-center">
+                                    <i class="fas fa-database mr-3"></i> Database Schema
+                                </h3>
+                                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                    <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
+                                        <h4 class="font-bold text-slate-800 flex items-center mb-3">
+                                            <span class="bg-blue-100 text-blue-700 px-2 py-0.5 rounded text-[10px] uppercase mr-2">Table</span>
+                                            openslo_records
+                                        </h4>
+                                        <p class="text-[11px] text-slate-500 mb-4">Stores all core entities: Services, SLIs, SLOs, DataSources, and AlertingSources. Each record is mapped to a Department and ITAL (IT Area Lead).</p>
+                                        <div class="grid grid-cols-2 gap-2 text-[9px]">
+                                            <div class="p-2 bg-slate-50 rounded border border-slate-100"><strong>id:</strong> PK (Long)</div>
+                                            <div class="p-2 bg-slate-50 rounded border border-slate-100"><strong>kind:</strong> Record Type (Enum)</div>
+                                            <div class="p-2 bg-slate-50 rounded border border-slate-100"><strong>name:</strong> Unique System Name</div>
+                                            <div class="p-2 bg-slate-50 rounded border border-slate-100"><strong>display_name:</strong> Human Name</div>
+                                            <div class="p-2 bg-slate-50 rounded border border-slate-100"><strong>spec:</strong> Raw YAML/JSON Config</div>
+                                            <div class="p-2 bg-slate-50 rounded border border-slate-100"><strong>department:</strong> Assigned Group</div>
+                                            <div class="p-2 bg-slate-50 rounded border border-slate-100"><strong>ital:</strong> IT Area Lead</div>
+                                            <div class="p-2 bg-slate-50 rounded border border-slate-100"><strong>alert_url:</strong> Webhook URL</div>
+                                            <div class="p-2 bg-slate-50 rounded border border-slate-100"><strong>alert_payload:</strong> JSON Template</div>
+                                            <div class="p-2 bg-slate-50 rounded border border-slate-100"><strong>service_id:</strong> FK (Service Parent)</div>
+                                            <div class="p-2 bg-slate-50 rounded border border-slate-100"><strong>alerting_source_id:</strong> FK (AlertSource)</div>
+                                        </div>
+                                    </div>
+
+                                    <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
+                                        <h4 class="font-bold text-slate-800 flex items-center mb-3">
+                                            <span class="bg-blue-100 text-blue-700 px-2 py-0.5 rounded text-[10px] uppercase mr-2">Table</span>
+                                            sli_metric
+                                        </h4>
+                                        <p class="text-[11px] text-slate-500 mb-4">Time-series data for all SLIs. Metrics are collected by the scheduler based on the DataSource refresh rate.</p>
+                                        <div class="grid grid-cols-2 gap-2 text-[9px]">
+                                            <div class="p-2 bg-slate-50 rounded border border-slate-100"><strong>id:</strong> PK (Long)</div>
+                                            <div class="p-2 bg-slate-50 rounded border border-slate-100"><strong>timestamp:</strong> Collection Time</div>
+                                            <div class="p-2 bg-slate-50 rounded border border-slate-100"><strong>metric_value:</strong> Measured Value (Range: 0-100)</div>
+                                            <div class="p-2 bg-slate-50 rounded border border-slate-100"><strong>sli_id:</strong> FK (Target SLI)</div>
+                                            <div class="p-2 bg-slate-50 rounded border border-slate-100"><strong>datasource_id:</strong> FK (Source)</div>
+                                        </div>
+                                    </div>
+
+                                    <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
+                                        <h4 class="font-bold text-slate-800 flex items-center mb-3">
+                                            <span class="bg-blue-100 text-blue-700 px-2 py-0.5 rounded text-[10px] uppercase mr-2">Table</span>
+                                            melo_users
+                                        </h4>
+                                        <p class="text-[11px] text-slate-500 mb-4">Manages application users and their access control permissions (Role-Based and Department-Based).</p>
+                                        <div class="grid grid-cols-2 gap-2 text-[9px]">
+                                            <div class="p-2 bg-slate-50 rounded border border-slate-100"><strong>id:</strong> PK (Long)</div>
+                                            <div class="p-2 bg-slate-50 rounded border border-slate-100"><strong>username:</strong> Login Unique Name</div>
+                                            <div class="p-2 bg-slate-50 rounded border border-slate-100"><strong>email:</strong> User Email</div>
+                                            <div class="p-2 bg-slate-50 rounded border border-slate-100"><strong>departments:</strong> CSV list of Depts</div>
+                                            <div class="p-2 bg-slate-50 rounded border border-slate-100"><strong>password:</strong> BCrypt Encoded</div>
+                                        </div>
+                                    </div>
+
+                                    <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
+                                        <h4 class="font-bold text-slate-800 flex items-center mb-3">
+                                            <span class="bg-blue-100 text-blue-700 px-2 py-0.5 rounded text-[10px] uppercase mr-2">Table</span>
+                                            slo_slis
+                                        </h4>
+                                        <p class="text-[11px] text-slate-500 mb-4">Join table for the Many-to-Many relationship between SLOs and SLIs (Objectives and Indicators).</p>
+                                        <div class="grid grid-cols-2 gap-2 text-[9px]">
+                                            <div class="p-2 bg-slate-50 rounded border border-slate-100"><strong>slo_id:</strong> FK (SLO)</div>
+                                            <div class="p-2 bg-slate-50 rounded border border-slate-100"><strong>sli_id:</strong> FK (SLI)</div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </section>
+                        </div>
+                    </div>
+
+                    <!-- Database Query View -->
+                    <div v-if="currentView === 'query' && isAdmin" class="animate__animated animate__fadeIn">
+                        <div class="grid grid-cols-12 gap-6">
+                            <!-- Tables Sidebar -->
+                            <div class="col-span-12 lg:col-span-3 space-y-4">
+                                <div class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
+                                    <h3 class="text-sm font-bold text-slate-700 mb-4 uppercase tracking-wider flex items-center">
+                                        <i class="fas fa-table text-blue-500 mr-2"></i> Database Tables
+                                    </h3>
+                                    <div class="space-y-1">
+                                        <button 
+                                            v-for="table in dbTables" 
+                                            :key="table"
+                                            @click="viewTableStructure(table)"
+                                            class="w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center justify-between group"
+                                            :class="selectedTableName === table ? 'bg-blue-50 text-blue-700' : 'text-slate-600 hover:bg-slate-50'"
+                                        >
+                                            <span>{{ table }}</span>
+                                            <i class="fas fa-chevron-right text-[10px] opacity-0 group-hover:opacity-100 transition-opacity"></i>
+                                        </button>
+                                    </div>
+                                    <button @click="fetchTables" class="mt-4 w-full py-2 text-[10px] font-bold text-slate-400 uppercase tracking-widest hover:text-slate-600 transition-colors">
+                                        <i class="fas fa-sync-alt mr-1"></i> Refresh List
+                                    </button>
+                                </div>
+                            </div>
+
+                            <!-- Query Area -->
+                            <div class="col-span-12 lg:col-span-9 space-y-6">
+                                <div class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
+                                    <h2 class="text-2xl font-bold text-slate-800 mb-4 flex items-center">
+                                        <i class="fas fa-database text-blue-600 mr-3"></i> SQL Query Tool
+                                    </h2>
+                                    <p class="text-slate-500 text-sm mb-6">
+                                        Execute raw SQL queries against the H2 database. For security reasons, only <span class="font-bold text-slate-700">SELECT</span> statements are permitted.
+                                    </p>
+                                    
+                                    <div class="space-y-4">
+                                        <div>
+                                            <label class="block text-sm font-bold text-slate-700 mb-2 uppercase tracking-wider">SQL Statement</label>
+                                            <textarea 
+                                                v-model="querySql" 
+                                                class="w-full h-32 p-4 bg-slate-900 text-emerald-400 font-mono text-sm rounded-xl border border-slate-700 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all shadow-inner"
+                                                placeholder="SELECT * FROM openslo_records LIMIT 10"
+                                            ></textarea>
+                                        </div>
+                                        
+                                        <div class="flex items-center justify-between">
+                                            <div class="flex space-x-2">
+                                                <button @click="querySql = 'SELECT * FROM openslo_records'" class="px-3 py-1 bg-slate-100 hover:bg-slate-200 text-slate-600 text-[11px] font-bold rounded-lg transition-colors uppercase">All Records</button>
+                                                <button @click="querySql = 'SELECT * FROM sli_metric ORDER BY timestamp DESC LIMIT 50'" class="px-3 py-1 bg-slate-100 hover:bg-slate-200 text-slate-600 text-[11px] font-bold rounded-lg transition-colors uppercase">Recent Metrics</button>
+                                                <button @click="querySql = 'SELECT kind, count(*) FROM openslo_records GROUP BY kind'" class="px-3 py-1 bg-slate-100 hover:bg-slate-200 text-slate-600 text-[11px] font-bold rounded-lg transition-colors uppercase">Stats</button>
+                                            </div>
+                                            <button 
+                                                @click="runQuery" 
+                                                :disabled="isQueryLoading"
+                                                class="px-6 py-2 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 transition-all shadow-lg shadow-blue-200 flex items-center disabled:opacity-50"
+                                            >
+                                                <i v-if="isQueryLoading" class="fas fa-spinner fa-spin mr-2"></i>
+                                                <i v-else class="fas fa-play mr-2 text-xs"></i>
+                                                Execute Query
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Table Structure View -->
+                                <div v-if="selectedTableStructure" class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden animate__animated animate__fadeIn">
+                                    <div class="p-4 border-b border-slate-100 bg-slate-50/50 flex justify-between items-center">
+                                        <div class="flex items-center">
+                                            <i class="fas fa-info-circle text-blue-500 mr-2"></i>
+                                            <span class="text-xs font-bold text-slate-500 uppercase tracking-widest">Structure: {{ selectedTableName }}</span>
+                                        </div>
+                                        <div class="flex space-x-2">
+                                            <button @click="querySql = 'SELECT * FROM ' + selectedTableName; runQuery();" class="text-blue-600 hover:text-blue-800 text-[10px] font-bold uppercase">Query Table</button>
+                                            <button @click="selectedTableStructure = null; selectedTableName = ''" class="text-slate-400 hover:text-slate-600 text-xs font-medium"><i class="fas fa-times"></i></button>
+                                        </div>
+                                    </div>
+                                    <div class="overflow-x-auto">
+                                        <table class="w-full text-left border-collapse text-sm">
+                                            <thead>
+                                                <tr class="bg-slate-50/80">
+                                                    <th class="px-6 py-3 font-bold text-slate-500 uppercase text-[10px]">Column</th>
+                                                    <th class="px-6 py-3 font-bold text-slate-500 uppercase text-[10px]">Type</th>
+                                                    <th class="px-6 py-3 font-bold text-slate-500 uppercase text-[10px]">Nullable</th>
+                                                    <th class="px-6 py-3 font-bold text-slate-500 uppercase text-[10px]">Default</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody class="divide-y divide-slate-100">
+                                                <tr v-for="col in selectedTableStructure" :key="col.COLUMN_NAME">
+                                                    <td class="px-6 py-3 font-mono font-medium text-slate-700">{{ col.COLUMN_NAME }}</td>
+                                                    <td class="px-6 py-3 text-slate-500 text-xs">{{ col.DATA_TYPE }}</td>
+                                                    <td class="px-6 py-3">
+                                                        <span :class="col.IS_NULLABLE === 'YES' ? 'text-green-600' : 'text-slate-400'" class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100">
+                                                            {{ col.IS_NULLABLE }}
+                                                        </span>
+                                                    </td>
+                                                    <td class="px-6 py-3 text-slate-400 italic text-[10px]">{{ col.COLUMN_DEFAULT || 'NULL' }}</td>
+                                                </tr>
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+
+                                <!-- Query Results -->
+                                <div v-if="queryError" class="bg-red-50 border border-red-100 text-red-600 p-4 rounded-xl flex items-start space-x-3">
+                                    <i class="fas fa-exclamation-triangle mt-1"></i>
+                                    <div>
+                                        <p class="font-bold text-sm">Query Execution Failed</p>
+                                        <p class="text-xs opacity-90">{{ queryError }}</p>
+                                    </div>
+                                </div>
+
+                                <div v-if="queryResults.length > 0" class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                                    <div class="p-4 border-b border-slate-100 bg-slate-50/50 flex justify-between items-center">
+                                        <span class="text-xs font-bold text-slate-500 uppercase tracking-widest">Results ({{ queryResults.length }})</span>
+                                        <button @click="queryResults = []" class="text-slate-400 hover:text-slate-600 text-xs font-medium">Clear</button>
+                                    </div>
+                                    <div class="overflow-x-auto max-h-[500px]">
+                                        <table class="w-full text-left border-collapse">
+                                            <thead class="bg-white sticky top-0 shadow-sm">
+                                                <tr>
+                                                    <th v-for="key in Object.keys(queryResults[0])" :key="key" class="px-6 py-4 text-[11px] font-bold text-slate-500 uppercase tracking-wider border-b border-slate-100">
+                                                        {{ key }}
+                                                    </th>
+                                                </tr>
+                                            </thead>
+                                            <tbody class="divide-y divide-slate-50">
+                                                <tr v-for="(row, idx) in queryResults" :key="idx" class="hover:bg-slate-50 transition-colors">
+                                                    <td v-for="key in Object.keys(queryResults[0])" :key="key" class="px-6 py-4 text-sm text-slate-600 whitespace-nowrap">
+                                                        <div class="max-w-xs truncate" :title="row[key]">
+                                                            {{ row[key] }}
+                                                        </div>
+                                                    </td>
+                                                </tr>
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                                <div v-else-if="!isQueryLoading && !queryError && querySql && !selectedTableStructure" class="bg-white p-12 rounded-2xl border border-slate-200 shadow-sm text-center">
+                                    <div class="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center text-slate-300 mx-auto mb-4">
+                                        <i class="fas fa-table text-2xl"></i>
+                                    </div>
+                                    <h3 class="text-slate-800 font-bold">No data to display</h3>
+                                    <p class="text-slate-500 text-sm">Execute a query or select a table to see details here.</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Users Administration View -->
+                    <div v-if="currentView === 'users' && isAdmin" class="animate__animated animate__fadeIn">
+                        <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden mb-8">
+                            <div class="p-6 border-b border-slate-100 flex items-center justify-between">
+                                <h2 class="text-2xl font-bold text-slate-800">User Administration</h2>
+                                <button @click="openUserCreateModal" class="px-4 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors shadow-sm text-sm">
+                                    <i class="fas fa-user-plus mr-2"></i> Add User
+                                </button>
+                            </div>
+                            <div class="overflow-x-auto">
+                                <table class="w-full text-left border-collapse">
+                                    <thead>
+                                        <tr class="bg-slate-50/50">
+                                            <th class="px-6 py-4 text-[11px] font-bold text-slate-500 uppercase tracking-wider">Username</th>
+                                            <th class="px-6 py-4 text-[11px] font-bold text-slate-500 uppercase tracking-wider">Email</th>
+                                            <th class="px-6 py-4 text-[11px] font-bold text-slate-500 uppercase tracking-wider">Departments</th>
+                                            <th class="px-6 py-4 text-[11px] font-bold text-slate-500 uppercase tracking-wider">Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody class="divide-y divide-slate-100">
+                                        <tr v-for="u in users" :key="u.id" class="hover:bg-slate-50 transition-colors">
+                                            <td class="px-6 py-4 text-sm font-semibold text-slate-800">{{ u.username }}</td>
+                                            <td class="px-6 py-4 text-sm text-slate-600">{{ u.email }}</td>
+                                            <td class="px-6 py-4">
+                                                <span v-if="u.departments" class="px-2 py-1 bg-blue-50 text-blue-700 text-[10px] font-bold rounded-lg uppercase border border-blue-100">{{ u.departments }}</span>
+                                                <span v-else class="px-2 py-1 bg-slate-100 text-slate-500 text-[10px] font-bold rounded-lg uppercase border border-slate-200">Full Access</span>
+                                            </td>
+                                            <td class="px-6 py-4 text-sm space-x-2">
+                                                <button @click="openUserEditModal(u)" class="p-2 text-slate-400 hover:text-blue-600 transition-colors"><i class="fas fa-edit"></i></button>
+                                                <button @click="deleteUser(u.id)" class="p-2 text-slate-400 hover:text-red-600 transition-colors"><i class="fas fa-trash"></i></button>
+                                            </td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </main>
+        </div>
+
+        <!-- Create/Edit Modal -->
+        <div v-if="isModalOpen" class="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <div class="absolute inset-0 bg-slate-900 opacity-50" @click="closeModal"></div>
+            <div class="relative bg-white rounded-2xl shadow-xl w-full max-w-2xl overflow-hidden animate__animated animate__fadeInUp">
+                <div class="p-6 border-b border-slate-200 flex items-center justify-between">
+                    <h3 class="text-xl font-bold text-slate-800">{{ isEditing ? 'Edit SLO' : 'Create New SLO' }}</h3>
+                    <button @click="closeModal" class="text-slate-400 hover:text-slate-600 transition-colors">
+                        <i class="fas fa-times text-xl"></i>
+                    </button>
+                </div>
+                <form @submit.prevent="saveSlo">
+                    <div class="p-6 grid grid-cols-2 gap-6 max-h-[70vh] overflow-y-auto">
+                        <div class="col-span-1">
+                            <label class="block text-sm font-bold text-slate-700 mb-1">Display Name</label>
+                            <p class="text-[10px] text-slate-500 mb-2">A human-readable name for this record (e.g., "Checkout Latency").</p>
+                            <input type="text" v-model="form.displayName" placeholder="e.g. Checkout Latency" class="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none text-sm">
+                        </div>
+                        <div class="col-span-1">
+                            <label class="block text-sm font-bold text-slate-700 mb-1">System Name (ID)</label>
+                            <p class="text-[10px] text-slate-500 mb-2">Unique identifier used for referencing (e.g., "checkout-latency").</p>
+                            <input type="text" v-model="form.name" placeholder="e.g. checkout-latency" class="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none text-sm" required :disabled="isEditing">
+                        </div>
+                        <div class="col-span-1">
+                            <label class="block text-sm font-bold text-slate-700 mb-1">API Version</label>
+                            <p class="text-[10px] text-slate-500 mb-2">The version of the OpenSLO specification being used.</p>
+                            <input type="text" v-model="form.apiVersion" placeholder="openslo/v1" class="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none text-sm" required>
+                        </div>
+                        <div class="col-span-1">
+                            <label class="block text-sm font-bold text-slate-700 mb-1">Kind</label>
+                            <p class="text-[10px] text-slate-500 mb-2">Type of record: Service (collection), SLI (metric), or SLO (target).</p>
+                            <select v-model="form.kind" class="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none text-sm">
+                                <option value="SLO">SLO</option>
+                                <option value="Service">Service</option>
+                                <option value="SLI">SLI</option>
+                                <option value="DataSource">DataSource</option>
+                                <option value="AlertingSource">AlertingSource</option>
+                            </select>
+                        </div>
+                        <div class="col-span-1">
+                            <label class="block text-sm font-bold text-slate-700 mb-1">Department</label>
+                            <p class="text-[10px] text-slate-500 mb-2">The organizational unit responsible for this record.</p>
+                            <input type="text" v-model="form.department" placeholder="e.g. Finance, Platform" class="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none text-sm">
+                        </div>
+                        <div class="col-span-1">
+                            <label class="block text-sm font-bold text-slate-700 mb-1">IT Area Lead (ITAL)</label>
+                            <p class="text-[10px] text-slate-500 mb-2">The lead responsible for the IT area this record belongs to.</p>
+                            <input type="text" v-model="form.ital" placeholder="e.g. John Doe" class="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none text-sm">
+                        </div>
+                        <div v-if="form.kind === 'DataSource'" class="col-span-1">
+                            <label class="block text-sm font-bold text-slate-700 mb-1">Refresh Rate (minutes)</label>
+                            <p class="text-[10px] text-slate-500 mb-2">How often metrics should be fetched. Min 15, Default 60.</p>
+                            <input type="number" v-model="form.refreshRate" min="15" placeholder="60" class="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none text-sm">
+                        </div>
+                        <div v-if="form.kind === 'SLI'" class="col-span-1">
+                            <label class="block text-sm font-bold text-slate-700 mb-1">DataSource</label>
+                            <p class="text-[10px] text-slate-500 mb-2">The source where this SLI metrics are fetched from.</p>
+                            <select v-model="form.datasource" class="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none text-sm">
+                                <option :value="null">None</option>
+                                <option v-for="ds in datasources" :key="ds.id" :value="{id: ds.id}">{{ ds.displayName || ds.name }}</option>
+                            </select>
+                        </div>
+                        <div v-if="form.kind === 'SLI'" class="col-span-2">
+                            <div class="p-3 bg-blue-50 border border-blue-200 rounded-lg flex items-start space-x-3">
+                                <i class="fas fa-info-circle text-blue-500 mt-0.5"></i>
+                                <div class="text-xs text-blue-700">
+                                    <strong>Metric Range:</strong> All metrics for an SLI should be between <strong>0 and 100</strong>. This ensures correct SLO calculations and visualization across the platform.
+                                </div>
+                            </div>
+                        </div>
+                        <div v-if="form.kind === 'SLO'" class="col-span-1">
+                            <label class="block text-sm font-bold text-slate-700 mb-1">Service</label>
+                            <p class="text-[10px] text-slate-500 mb-2">The service this SLO is associated with.</p>
+                            <select v-model="form.service" class="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none text-sm">
+                                <option :value="null">None</option>
+                                <option v-for="s in services" :key="s.id" :value="{id: s.id}">{{ s.displayName || s.name }}</option>
+                            </select>
+                        </div>
+                        <div v-if="form.kind === 'SLO'" class="col-span-1">
+                            <label class="block text-sm font-bold text-slate-700 mb-1">Indicators (SLIs)</label>
+                            <p class="text-[10px] text-slate-500 mb-2">Select one or more metrics (Ctrl/Cmd click).</p>
+                            <select v-model="form.slis" multiple class="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none text-sm min-h-[80px]">
+                                <option v-for="s in slis" :key="s.id" :value="{id: s.id}">{{ s.displayName || s.name }}</option>
+                            </select>
+                        </div>
+                        <div v-if="form.kind === 'Service'" class="col-span-2">
+                            <label class="block text-sm font-bold text-slate-700 mb-1">Associated SLOs</label>
+                            <p class="text-[10px] text-slate-500 mb-2">Select SLOs to associate with this service (Ctrl/Cmd click).</p>
+                            <select v-model="form.slos" multiple class="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none text-sm min-h-[80px]">
+                                <option v-for="s in slos" :key="s.id" :value="{id: s.id}">{{ s.displayName || s.name }}</option>
+                            </select>
+                        </div>
+                        <div v-if="form.kind === 'DataSource' || form.kind === 'AlertingSource'" class="col-span-2">
+                            <label class="block text-sm font-bold text-slate-700 mb-1">{{ form.kind === 'DataSource' ? 'DataSource' : 'Alerting' }} Template</label>
+                            <p class="text-[10px] text-slate-500 mb-2">Select a pre-defined template to jumpstart your configuration.</p>
+                            <select v-model="selectedTemplate" @change="applyTemplate" class="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none text-sm">
+                                <option value="">-- Select a Template (Optional) --</option>
+                                <template v-if="form.kind === 'DataSource'">
+                                    <option v-for="(yaml, name) in dataSourceTemplates" :key="name" :value="name">{{ name }}</option>
+                                </template>
+                                <template v-else-if="form.kind === 'AlertingSource'">
+                                    <option v-for="(yaml, name) in alertingTemplates" :key="name" :value="name">{{ name }}</option>
+                                </template>
+                            </select>
+                        </div>
+                        <div v-if="form.kind === 'SLO'" class="col-span-1">
+                            <label class="block text-sm font-bold text-slate-700 mb-1">Alerting Source</label>
+                            <p class="text-[10px] text-slate-500 mb-2">The alerting source to trigger when this SLO is breached.</p>
+                            <select v-model="form.alertingSource" class="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none text-sm">
+                                <option :value="null">None</option>
+                                <option v-for="source in alertingSources" :key="source.id" :value="{id: source.id}">{{ source.displayName || source.name }}</option>
+                            </select>
+                        </div>
+                        <div v-if="form.kind === 'AlertingSource'" class="col-span-2">
+                            <label class="block text-sm font-bold text-slate-700 mb-1">Alert URL (Webhook)</label>
+                            <p class="text-[10px] text-slate-500 mb-2">The endpoint URL where the alert payload will be sent (POST).</p>
+                            <input type="url" v-model="form.alertUrl" placeholder="https://hooks.slack.com/services/..." class="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none text-sm">
+                        </div>
+                        <div v-if="form.kind === 'AlertingSource'" class="col-span-2">
+                            <label class="block text-sm font-bold text-slate-700 mb-1">Alert Payload Template (JSON)</label>
+                            <p class="text-[10px] text-slate-500 mb-2">Available variables: ${SLO_NAME}, ${SLO_STATUS}, ${SLO_VALUE}</p>
+                            <textarea v-model="form.alertPayload" rows="4" class="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none font-mono text-xs"></textarea>
+                        </div>
+                        <div class="col-span-2">
+                            <label class="block text-sm font-bold text-slate-700 mb-1">Specification (YAML/JSON)</label>
+                            <p class="text-[10px] text-slate-500 mb-2">The full OpenSLO compliant specification defining the logic.</p>
+                            <textarea v-model="form.spec" rows="6" placeholder="apiVersion: openslo/v1..." class="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none font-mono text-xs" required></textarea>
+                        </div>
+                    </div>
+                    <div class="p-6 border-t border-slate-200 bg-slate-50 flex justify-end space-x-3">
+                        <button type="button" @click="closeModal" class="px-6 py-2 text-slate-600 font-medium hover:text-slate-800 transition-colors">Cancel</button>
+                        <button type="submit" class="px-6 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors shadow-sm">
+                            {{ isEditing ? 'Update SLO' : 'Create SLO' }}
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- DataSource Info Modal -->
+        <div v-if="isDsModalOpen" class="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <div class="absolute inset-0 bg-slate-900 opacity-50" @click="closeDsModal"></div>
+            <div class="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden relative z-10 animate__animated animate__zoomIn animate__faster">
+                <div class="p-6 border-b border-slate-200 flex items-center justify-between bg-slate-50">
+                    <div class="flex items-center space-x-3">
+                        <div class="w-10 h-10 bg-blue-100 text-blue-600 rounded-lg flex items-center justify-center">
+                            <i class="fas fa-database text-xl"></i>
+                        </div>
+                        <div>
+                            <h2 class="text-xl font-bold text-slate-800">{{ selectedDs.displayName || selectedDs.name }}</h2>
+                            <p class="text-xs text-slate-500 font-medium uppercase tracking-wider">DataSource Details</p>
+                        </div>
+                    </div>
+                    <button @click="closeDsModal" class="text-slate-400 hover:text-slate-600 transition-colors bg-white p-2 rounded-full border border-slate-200 shadow-sm">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+                
+                <div class="p-8 overflow-y-auto max-h-[calc(90vh-140px)]">
+                    <div v-if="selectedDs" class="grid grid-cols-1 md:grid-cols-3 gap-8 mb-8">
+                        <div class="space-y-6">
+                            <div class="bg-slate-50 p-4 rounded-xl border border-slate-100">
+                                <h3 class="text-xs font-bold text-slate-400 uppercase mb-3 tracking-widest">General Info</h3>
+                                <div class="space-y-4">
+                                    <div>
+                                        <p class="text-xs text-slate-500 mb-1">System Name</p>
+                                        <p class="text-sm font-semibold text-slate-800">{{ selectedDs.name }}</p>
+                                    </div>
+                                    <div>
+                                        <p class="text-xs text-slate-500 mb-1">API Version</p>
+                                        <p class="text-sm font-semibold text-slate-800">{{ selectedDs.apiVersion }}</p>
+                                    </div>
+                                    <div>
+                                        <p class="text-xs text-slate-500 mb-1">Type</p>
+                                        <span class="px-2 py-1 bg-blue-600 text-white rounded text-[10px] font-bold uppercase">
+                                            {{ getSpecField(selectedDs.spec, 'type') || 'N/A' }}
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="bg-slate-50 p-4 rounded-xl border border-slate-100">
+                                <h3 class="text-xs font-bold text-slate-400 uppercase mb-3 tracking-widest">Ownership</h3>
+                                <div class="space-y-4">
+                                    <div>
+                                        <p class="text-xs text-slate-500 mb-1">Department</p>
+                                        <p class="text-sm font-semibold text-slate-800">{{ selectedDs.department || 'N/A' }}</p>
+                                    </div>
+                                    <div>
+                                        <p class="text-xs text-slate-500 mb-1">ITAL (IT Area Lead)</p>
+                                        <p class="text-sm font-semibold text-slate-800">{{ selectedDs.ital || 'N/A' }}</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="md:col-span-2 space-y-6">
+                            <div class="grid grid-cols-2 gap-4">
+                                <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+                                    <div class="flex items-center space-x-3 mb-2">
+                                        <div class="w-8 h-8 bg-green-50 text-green-600 rounded flex items-center justify-center">
+                                            <i class="fas fa-sync-alt"></i>
+                                        </div>
+                                        <span class="text-sm font-medium text-slate-500">Refresh Rate</span>
+                                    </div>
+                                    <p class="text-2xl font-bold text-slate-800">{{ selectedDs.refreshRate || 60 }} <span class="text-sm font-normal text-slate-500 italic">min</span></p>
+                                </div>
+                                <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+                                    <div class="flex items-center space-x-3 mb-2">
+                                        <div class="w-8 h-8 bg-purple-50 text-purple-600 rounded flex items-center justify-center">
+                                            <i class="fas fa-clock"></i>
+                                        </div>
+                                        <span class="text-sm font-medium text-slate-500">Last Successful Sync</span>
+                                    </div>
+                                    <p class="text-sm font-bold text-slate-800">{{ selectedDs.lastRefreshTime ? new Date(selectedDs.lastRefreshTime).toLocaleString() : 'Never' }}</p>
+                                </div>
+                            </div>
+
+                            <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                                <div class="px-4 py-3 border-b border-slate-200 bg-slate-50 flex items-center justify-between">
+                                    <span class="text-xs font-bold text-slate-500 uppercase">Configuration Spec</span>
+                                    <i class="fas fa-code text-slate-300"></i>
+                                </div>
+                                <div class="p-0">
+                                    <pre class="language-yaml" style="margin: 0; border-radius: 0;"><code class="text-xs">{{ selectedDs.spec }}</code></pre>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="p-6 border-t border-slate-200 bg-slate-50 flex justify-end">
+                    <button @click="closeDsModal" class="px-8 py-2 bg-slate-800 text-white rounded-lg font-medium hover:bg-slate-900 transition-colors shadow-sm">Close</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- API Detail Modal -->
+        <div v-if="isApiModalOpen" class="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <div class="absolute inset-0 bg-slate-900 opacity-50" @click="closeApiModal"></div>
+            <div class="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden relative z-10 animate__animated animate__zoomIn animate__faster">
+                <div class="p-6 border-b border-slate-200 flex items-center justify-between bg-slate-50">
+                    <div class="flex items-center space-x-3">
+                        <div class="w-10 h-10 bg-indigo-100 text-indigo-600 rounded-lg flex items-center justify-center">
+                            <i class="fas fa-network-wired text-xl"></i>
+                        </div>
+                        <div>
+                            <h2 class="text-xl font-bold text-slate-800">API Documentation</h2>
+                            <p class="text-xs text-slate-500 font-medium uppercase tracking-wider">Endpoint Details & Usage</p>
+                        </div>
+                    </div>
+                    <button @click="closeApiModal" class="text-slate-400 hover:text-slate-600 transition-colors bg-white p-2 rounded-full border border-slate-200 shadow-sm">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+                
+                <div class="p-8 overflow-y-auto max-h-[calc(90vh-140px)]">
+                    <div v-if="selectedApi" class="space-y-8">
+                        <div class="flex items-center space-x-4">
+                            <span class="px-3 py-1 bg-blue-600 text-white rounded font-bold text-sm uppercase">{{ selectedApi.method }}</span>
+                            <code class="text-lg font-mono text-slate-700 font-bold bg-slate-100 px-3 py-1 rounded-lg border border-slate-200">{{ selectedApi.path }}</code>
+                        </div>
+
+                        <div class="bg-blue-50 p-6 rounded-2xl border border-blue-100">
+                            <h3 class="text-xs font-bold text-blue-500 uppercase mb-2 tracking-widest">Description</h3>
+                            <p class="text-slate-700 leading-relaxed">{{ selectedApi.description }}</p>
+                            <div v-if="selectedApi.params" class="mt-4 pt-4 border-t border-blue-200/50">
+                                <h4 class="text-[11px] font-bold text-blue-400 uppercase mb-1">Parameters</h4>
+                                <p class="text-xs text-slate-600 font-mono">{{ selectedApi.params }}</p>
+                            </div>
+                        </div>
+
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <div class="space-y-4">
+                                <div class="bg-slate-50 p-6 rounded-2xl border border-slate-200">
+                                    <h3 class="text-xs font-bold text-slate-400 uppercase mb-4 tracking-widest">How to use</h3>
+                                    <p class="text-sm text-slate-600">{{ selectedApi.usage }}</p>
+                                </div>
+
+                                <div v-if="selectedApi.requestJson" class="bg-slate-900 rounded-2xl overflow-hidden border border-slate-800">
+                                    <div class="px-4 py-2 bg-slate-800 flex items-center justify-between border-b border-slate-700">
+                                        <span class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Request JSON</span>
+                                        <i class="fas fa-arrow-up text-blue-400 text-xs"></i>
+                                    </div>
+                                    <pre class="language-json" style="margin: 0; padding: 1.5rem;"><code class="text-xs">{{ selectedApi.requestJson }}</code></pre>
+                                </div>
+                                <div v-else class="bg-slate-50 p-6 rounded-2xl border border-slate-100 flex items-center justify-center italic text-slate-400 text-sm">
+                                    No request body required
+                                </div>
+                            </div>
+
+                            <div class="bg-slate-900 rounded-2xl overflow-hidden border border-slate-800 flex flex-col">
+                                <div class="px-4 py-2 bg-slate-800 flex items-center justify-between border-b border-slate-700">
+                                    <span class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Response JSON</span>
+                                    <i class="fas fa-arrow-down text-green-400 text-xs"></i>
+                                </div>
+                                <div class="flex-grow overflow-auto p-6">
+                                    <pre class="language-json" style="margin: 0; padding: 0;"><code class="text-xs">{{ selectedApi.responseJson }}</code></pre>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="p-6 border-t border-slate-200 bg-slate-50 flex justify-end">
+                    <button @click="closeApiModal" class="px-8 py-2 bg-slate-800 text-white rounded-lg font-medium hover:bg-slate-900 transition-colors shadow-sm">Close</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- User Modal -->
+        <div v-if="isUserModalOpen" class="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <div class="absolute inset-0 bg-slate-900 opacity-50" @click="closeUserModal"></div>
+            <div class="relative bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden animate__animated animate__fadeInUp">
+                <div class="p-6 border-b border-slate-200 flex items-center justify-between">
+                    <h3 class="text-xl font-bold text-slate-800">{{ isUserEditing ? 'Edit User' : 'Create New User' }}</h3>
+                    <button @click="closeUserModal" class="text-slate-400 hover:text-slate-600 transition-colors">
+                        <i class="fas fa-times text-xl"></i>
+                    </button>
+                </div>
+                <form @submit.prevent="saveUser">
+                    <div class="p-6 space-y-4">
+                        <div>
+                            <label class="block text-sm font-bold text-slate-700 mb-1">Username</label>
+                            <input type="text" v-model="userForm.username" required class="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none text-sm">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-bold text-slate-700 mb-1">Email</label>
+                            <input type="email" v-model="userForm.email" required class="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none text-sm">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-bold text-slate-700 mb-1">Password</label>
+                            <input type="password" v-model="userForm.password" :required="!isUserEditing" class="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none text-sm" :placeholder="isUserEditing ? 'Leave blank to keep current' : ''">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-bold text-slate-700 mb-1">Departments (Restriction)</label>
+                            <p class="text-[10px] text-slate-500 mb-2">Leave blank for full access (Administrator). Separate multiple with commas.</p>
+                            <input type="text" v-model="userForm.departments" placeholder="e.g. Finance, Engineering" class="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none text-sm">
+                        </div>
+                    </div>
+                    <div class="p-6 border-t border-slate-200 bg-slate-50 flex justify-end space-x-3">
+                        <button type="button" @click="closeUserModal" class="px-4 py-2 text-slate-600 font-medium hover:text-slate-800 transition-colors">Cancel</button>
+                        <button type="submit" class="px-6 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors shadow-sm">
+                            {{ isUserEditing ? 'Update User' : 'Create User' }}
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- Notification Toast -->
+        <div v-if="notification" class="fixed bottom-6 right-6 px-6 py-3 rounded-xl shadow-2xl flex items-center space-x-3 animate__animated animate__fadeInRight" 
+             :class="notification.type === 'success' ? 'bg-green-600 text-white' : 'bg-red-600 text-white'">
+            <i class="fas" :class="notification.type === 'success' ? 'fa-check-circle' : 'fa-exclamation-circle'"></i>
+            <span class="font-medium">{{ notification.message }}</span>
+        </div>
+    </div>
+
+    <script>
+        const { createApp, ref, computed, onMounted, nextTick, watch } = Vue;
+
+        createApp({
+            setup() {
+                const isAuthenticated = ref(false);
+                const isLoggingIn = ref(false);
+                const currentUser = ref(null);
+                const isAdmin = computed(() => currentUser.value && !currentUser.value.departments);
+                const loginForm = ref({ username: '', password: '' });
+                const loginError = ref('');
+
+                const users = ref([]);
+                const isUserModalOpen = ref(false);
+                const isUserEditing = ref(false);
+                const userForm = ref({ id: null, username: '', email: '', password: '', departments: '' });
+
+                const dashboardStats = ref({ totalServices: 0, totalSlos: 0, healthySlos: 0, warningSlos: 0, breachingSlos: 0 });
+                const currentView = ref('dashboard');
+                const records = ref([]);
+                const searchQuery = ref('');
+                const isModalOpen = ref(false);
+                const isDsModalOpen = ref(false);
+                const isApiModalOpen = ref(false);
+                const selectedApi = ref(null);
+                const isEditing = ref(false);
+                const selectedSlo = ref(null);
+                const selectedSloReport = ref(null);
+                const selectedSli = ref(null);
+                const selectedSliReport = ref(null);
+                const selectedService = ref(null);
+                const selectedServiceReport = ref(null);
+                const selectedDs = ref(null);
+                const notification = ref(null);
+                const querySql = ref('SELECT * FROM openslo_records LIMIT 10');
+                const queryResults = ref([]);
+                const queryError = ref('');
+                const isQueryLoading = ref(false);
+                const dbTables = ref([]);
+                const selectedTableStructure = ref(null);
+
+                const selectedReportRecords = ref([]);
+                const isGeneratingReport = ref(false);
+                const selectedTableName = ref('');
+                
+                const apiEndpoints = [
+                    {
+                        method: 'GET',
+                        path: '/api/v1/openslo',
+                        description: 'Retrieve all OpenSLO records (Services, SLIs, SLOs, DataSources). Supports filtering by kind.',
+                        usage: 'Call this endpoint to list all records. Administrators see everything, while restricted users only see records from their departments.',
+                        params: 'kind (optional): Filter by record type (e.g., Service, SLO).',
+                        requestJson: null,
+                        responseJson: '[\n  {\n    "id": 1,\n    "apiVersion": "openslo/v1",\n    "kind": "SLO",\n    "name": "api-latency",\n    "displayName": "API Latency",\n    "spec": "...",\n    "department": "Engineering"\n  }\n]'
+                    },
+                    {
+                        method: 'GET',
+                        path: '/api/v1/openslo/dashboard-stats',
+                        description: 'Retrieve aggregated statistics for the dashboard.',
+                        usage: 'Returns counts for total Services, SLOs, and SLOs categorized by health status (Healthy, Warning, Breaching).',
+                        requestJson: null,
+                        responseJson: '{\n  "totalServices": 5,\n  "totalSlos": 12,\n  "healthySlos": 8,\n  "warningSlos": 2,\n  "breachingSlos": 2\n}'
+                    },
+                    {
+                        method: 'GET',
+                        path: '/api/v1/openslo/{id}',
+                        description: 'Retrieve a specific OpenSLO record by its ID.',
+                        usage: 'Use this to get the full details and specification of a single record.',
+                        requestJson: null,
+                        responseJson: '{\n  "id": 1,\n  "apiVersion": "openslo/v1",\n  "kind": "SLO",\n  "name": "api-latency",\n  "spec": "...",\n  "department": "Engineering"\n}'
+                    },
+                    {
+                        method: 'POST',
+                        path: '/api/v1/openslo',
+                        description: 'Create a new OpenSLO record.',
+                        usage: 'Send a JSON object representing the record. The kind must be one of: Service, SLI, SLO, DataSource.',
+                        requestJson: '{\n  "kind": "SLO",\n  "name": "new-slo",\n  "displayName": "New SLO",\n  "spec": "apiVersion: openslo/v1\\nkind: SLO...",\n  "department": "Engineering"\n}',
+                        responseJson: '{\n  "id": 101,\n  "kind": "SLO",\n  "name": "new-slo",\n  ...\n}'
+                    },
+                    {
+                        method: 'PUT',
+                        path: '/api/v1/openslo/{id}',
+                        description: 'Update an existing OpenSLO record.',
+                        usage: 'Send the updated record as JSON. Only the fields provided will be updated.',
+                        requestJson: '{\n  "displayName": "Updated Name",\n  "spec": "..."\n}',
+                        responseJson: '{\n  "id": 1,\n  "displayName": "Updated Name",\n  ...\n}'
+                    },
+                    {
+                        method: 'DELETE',
+                        path: '/api/v1/openslo/{id}',
+                        description: 'Permanently delete an OpenSLO record.',
+                        usage: 'Deletes the record identified by ID. For SLOs, this also removes associations with SLIs.',
+                        requestJson: null,
+                        responseJson: 'Status 204 No Content'
+                    },
+                    {
+                        method: 'GET',
+                        path: '/api/v1/openslo/{id}/report',
+                        description: 'Get a comprehensive status report for an SLO.',
+                        usage: 'Returns current SLO achievement, targets, error budget, and health status (Healthy, Warning, Breaching).',
+                        requestJson: null,
+                        responseJson: '{\n  "sloName": "API Availability",\n  "currentValue": 99.95,\n  "target": 99.9,\n  "errorBudget": 0.05,\n  "status": "Healthy"\n}'
+                    },
+                    {
+                        method: 'GET',
+                        path: '/api/v1/openslo/{id}/service-report',
+                        description: 'Get an aggregated health report for all SLOs in a Service.',
+                        usage: 'Aggregates metrics and status for every SLO associated with the given Service ID.',
+                        requestJson: null,
+                        responseJson: '{\n  "serviceName": "Web API",\n  "sloReports": [\n    {\n      "sloName": "API Latency",\n      "currentValue": 0.95,\n      "target": 0.99,\n      "status": "Warning",\n      ...\n    }\n  ]\n}'
+                    },
+                    {
+                        method: 'GET',
+                        path: '/api/v1/openslo/{id}/sli-report',
+                        description: 'Get performance history and metrics for an SLI.',
+                        usage: 'Returns recent time-series data and calculated averages for the indicator.',
+                        requestJson: null,
+                        responseJson: '{\n  "sliName": "Latency",\n  "averageValue": 150.5,\n  "metrics": [\n    {\n      "timestamp": "2024-03-20T10:00:00",\n      "value": 145.2\n    }\n  ]\n}'
+                    },
+                    {
+                        method: 'GET',
+                        path: '/api/v1/users/me',
+                        description: 'Retrieve information about the currently logged-in user.',
+                        usage: 'Used by the frontend to determine permissions and show user profile details.',
+                        requestJson: null,
+                        responseJson: '{\n  "username": "admin",\n  "email": "admin@example.com",\n  "departments": "Finance,Engineering"\n}'
+                    },
+                    {
+                        method: 'POST',
+                        path: '/api/v1/database/query',
+                        description: 'Execute a raw SQL SELECT query (Admin Only).',
+                        usage: 'Allows direct database inspection. Restricted to SELECT statements for safety.',
+                        requestJson: '{\n  "sql": "SELECT * FROM openslo_records"\n}',
+                        responseJson: '[\n  {\n    "ID": 1,\n    "NAME": "api-latency",\n    ...\n  }\n]'
+                    },
+                    {
+                        method: 'POST',
+                        path: '/api/v1/reports/pdf',
+                        description: 'Generate an annual performance report in PDF format.',
+                        usage: 'Send a list of record IDs (Services or SLOs) to generate a consolidated report.',
+                        requestJson: '[\n  1, 5, 12\n]',
+                        responseJson: '(Binary PDF Content)'
+                    },
+                    {
+                        method: 'GET',
+                        path: '/api/v1/metrics',
+                        description: 'Retrieve all recorded performance metrics (Admin Only).',
+                        usage: 'Returns the full list of raw metric data points from the database.',
+                        requestJson: null,
+                        responseJson: '[\n  {\n    "id": 1,\n    "timestamp": "2024-03-20T10:00:00",\n    "metricValue": 98.5,\n    "sli": { "id": 10 }\n  }\n]'
+                    },
+                    {
+                        method: 'POST',
+                        path: '/api/v1/metrics',
+                        description: 'Manually record a new metric value for an SLI (Admin Only).',
+                        usage: 'Send a metric point linking to an SLI and DataSource. Note: metricValue must be between 0 and 100.',
+                        requestJson: '{\n  "timestamp": "2024-03-20T11:00:00",\n  "metricValue": 99.2,\n  "sli": { "id": 10 },\n  "datasource": { "id": 5 }\n}',
+                        responseJson: '{\n  "id": 501,\n  "metricValue": 99.2,\n  ...\n}'
+                    }
+                ];
+
+                const openApiModal = (api) => {
+                    selectedApi.value = api;
+                    isApiModalOpen.value = true;
+                    nextTick(() => {
+                        if (window.Prism) window.Prism.highlightAll();
+                    });
+                };
+
+                const closeApiModal = () => {
+                    isApiModalOpen.value = false;
+                };
+
+                const selectedTemplate = ref('');
+                const dataSourceTemplates = {
+                    'Prometheus': `apiVersion: openslo/v1
+kind: DataSource
+metadata:
+  name: prometheus-datasource
+spec:
+  type: prometheus
+  config:
+    url: http://prometheus:9090`,
+                    'OpenTelemetry': `apiVersion: openslo/v1
+kind: DataSource
+metadata:
+  name: otel-datasource
+spec:
+  type: opentelemetry
+  config:
+    endpoint: otel-collector:4317`,
+                    'Elasticsearch': `apiVersion: openslo/v1
+kind: DataSource
+metadata:
+  name: elasticsearch-datasource
+spec:
+  type: elasticsearch
+  config:
+    url: http://elasticsearch:9200
+    index: logs-*`,
+                    'Datadog': `apiVersion: openslo/v1
+kind: DataSource
+metadata:
+  name: datadog-datasource
+spec:
+  type: datadog
+  config:
+    apiKey: YOUR_API_KEY
+    appKey: YOUR_APP_KEY`,
+                    'Graphite': `apiVersion: openslo/v1
+kind: DataSource
+metadata:
+  name: graphite-datasource
+spec:
+  type: graphite
+  config:
+    url: http://graphite:8080`,
+                    'Grafana Loki': `apiVersion: openslo/v1
+kind: DataSource
+metadata:
+  name: loki-datasource
+spec:
+  type: loki
+  config:
+    url: http://loki:3100`
+                };
+
+                const alertingTemplates = {
+                    'Slack Webhook': `apiVersion: openslo/v1
+kind: AlertingSource
+metadata:
+  name: slack-alerts
+spec:
+  type: slack-webhook`,
+                    'Microsoft Teams': `apiVersion: openslo/v1
+kind: AlertingSource
+metadata:
+  name: teams-alerts
+spec:
+  type: teams-webhook`,
+                    'PagerDuty': `apiVersion: openslo/v1
+kind: AlertingSource
+metadata:
+  name: pagerduty-alerts
+spec:
+  type: pagerduty`,
+                    'Opsgenie': `apiVersion: openslo/v1
+kind: AlertingSource
+metadata:
+  name: opsgenie-alerts
+spec:
+  type: opsgenie`,
+                    'Generic Webhook': `apiVersion: openslo/v1
+kind: AlertingSource
+metadata:
+  name: generic-webhook
+spec:
+  type: webhook`
+                };
+
+                const applyTemplate = () => {
+                    let templateYaml = '';
+                    if (form.value.kind === 'DataSource' && dataSourceTemplates[selectedTemplate.value]) {
+                        templateYaml = dataSourceTemplates[selectedTemplate.value];
+                    } else if (form.value.kind === 'AlertingSource' && alertingTemplates[selectedTemplate.value]) {
+                        templateYaml = alertingTemplates[selectedTemplate.value];
+                        
+                        // Set some default URL and payload for common ones
+                        if (selectedTemplate.value === 'Slack Webhook') {
+                            form.value.alertUrl = 'https://hooks.slack.com/services/...';
+                            form.value.alertPayload = '{"text": "SLO *${SLO_NAME}* is *${SLO_STATUS}* with value *${SLO_VALUE}%*"}';
+                        } else if (selectedTemplate.value === 'Microsoft Teams') {
+                            form.value.alertUrl = 'https://outlook.office.com/webhook/...';
+                            form.value.alertPayload = '{"text": "SLO ${SLO_NAME} status is ${SLO_STATUS} (${SLO_VALUE}%)"}';
+                        } else if (selectedTemplate.value === 'PagerDuty') {
+                            form.value.alertUrl = 'https://events.pagerduty.com/v2/enqueue';
+                            form.value.alertPayload = '{"event_action": "trigger", "payload": {"summary": "SLO ${SLO_NAME} is ${SLO_STATUS}", "severity": "critical"}}';
+                        } else if (selectedTemplate.value === 'Opsgenie') {
+                            form.value.alertUrl = 'https://api.opsgenie.com/v2/alerts';
+                            form.value.alertPayload = '{"message": "SLO ${SLO_NAME} is ${SLO_STATUS}", "description": "Value: ${SLO_VALUE}%", "priority": "P1"}';
+                        } else if (selectedTemplate.value === 'Generic Webhook') {
+                            form.value.alertUrl = 'https://api.example.com/webhook';
+                            form.value.alertPayload = '{\n  "slo": "${SLO_NAME}",\n  "status": "${SLO_STATUS}",\n  "value": "${SLO_VALUE}"\n}';
+                        }
+                    }
+
+                    if (templateYaml) {
+                        form.value.spec = templateYaml;
+                        if (!isEditing.value) {
+                            try {
+                                const parsed = jsyaml.load(form.value.spec);
+                                if (parsed && parsed.metadata && parsed.metadata.name) {
+                                    form.value.name = parsed.metadata.name;
+                                }
+                            } catch (e) {}
+                        }
+                    }
+                };
+
+                const form = ref({
+                    id: null,
+                    name: '',
+                    displayName: '',
+                    apiVersion: 'openslo/v1',
+                    kind: 'SLO',
+                    spec: '',
+                    department: '',
+                    ital: '',
+                    refreshRate: 60,
+                    service: null,
+                    datasource: null,
+                    alertingSource: null,
+                    slis: [],
+                    slos: [],
+                    alertUrl: '',
+                    alertPayload: '{\n  "slo": "${SLO_NAME}",\n  "status": "${SLO_STATUS}",\n  "value": "${SLO_VALUE}"\n}'
+                });
+
+                const viewTitle = computed(() => {
+                    if (currentView.value === 'dashboard') return 'Dashboard';
+                    if (currentView.value === 'services') return 'Services';
+                    if (currentView.value === 'slos') return 'Service Level Objectives';
+                    if (currentView.value === 'slis') return 'Service Level Indicators';
+                    if (currentView.value === 'datasources') return 'Data Sources';
+                    if (currentView.value === 'alerting') return 'Alerting';
+                    if (currentView.value === 'details') return 'SLO Details';
+                    if (currentView.value === 'sli-details') return 'SLI Details';
+                    if (currentView.value === 'service-details') return 'Service Details';
+                    if (currentView.value === 'docs') return 'Documentation';
+                    if (currentView.value === 'query') return 'Query Tool';
+                    if (currentView.value === 'reports') return 'Annual Reports';
+                    return '';
+                });
+
+                const services = computed(() => records.value.filter(r => r.kind === 'Service'));
+                const slos = computed(() => records.value.filter(r => r.kind === 'SLO'));
+                const slis = computed(() => records.value.filter(r => r.kind === 'SLI'));
+                const datasources = computed(() => records.value.filter(r => r.kind === 'DataSource'));
+                const alertingSources = computed(() => records.value.filter(r => r.kind === 'AlertingSource'));
+                const reportableRecords = computed(() => records.value.filter(r => r.kind === 'Service' || r.kind === 'SLO'));
+                const isAllReportsSelected = computed(() => reportableRecords.value.length > 0 && selectedReportRecords.value.length === reportableRecords.value.length);
+
+                const healthyCount = computed(() => dashboardStats.value.healthySlos);
+                const warningCount = computed(() => dashboardStats.value.warningSlos);
+                const breachingCount = computed(() => dashboardStats.value.breachingSlos);
+
+                const filteredSlos = computed(() => {
+                    if (!searchQuery.value) return slos.value;
+                    const q = searchQuery.value.toLowerCase();
+                    return slos.value.filter(s => 
+                        s.name.toLowerCase().includes(q) || 
+                        (s.displayName && s.displayName.toLowerCase().includes(q))
+                    );
+                });
+
+                const openDsModal = (ds) => {
+                    selectedDs.value = ds;
+                    isDsModalOpen.value = true;
+                    nextTick(() => {
+                        if (window.Prism) {
+                            Prism.highlightAll();
+                        }
+                    });
+                };
+
+                const closeDsModal = () => {
+                    isDsModalOpen.value = false;
+                    selectedDs.value = null;
+                };
+
+                const checkAuth = async () => {
+                    console.log('[DEBUG_LOG] Checking auth...');
+                    try {
+                        const response = await fetch('/api/v1/users/me', { credentials: 'same-origin' });
+                        console.log('[DEBUG_LOG] /api/v1/users/me response status:', response.status);
+                        if (response.ok) {
+                            currentUser.value = await response.json();
+                            console.log('[DEBUG_LOG] Current user:', currentUser.value);
+                            isAuthenticated.value = true;
+                            if (isAdmin.value) {
+                                fetchUsers();
+                            }
+                        } else {
+                            console.log('[DEBUG_LOG] Auth check failed (not ok)');
+                            isAuthenticated.value = false;
+                        }
+                    } catch (e) {
+                        console.error('[DEBUG_LOG] Auth check error:', e);
+                        isAuthenticated.value = false;
+                    }
+                };
+
+                const handleLogin = async () => {
+                    console.log('[DEBUG_LOG] Handling login for:', loginForm.value.username);
+                    isLoggingIn.value = true;
+                    loginError.value = '';
+                    const params = new URLSearchParams();
+                    params.append('username', loginForm.value.username);
+                    params.append('password', loginForm.value.password);
+                    
+                    try {
+                        console.log('[DEBUG_LOG] Posting to /api/login...');
+                        const response = await fetch('/api/login', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/x-www-form-urlencoded'
+                            },
+                            body: params,
+                            credentials: 'same-origin'
+                        });
+                        console.log('[DEBUG_LOG] /api/login response status:', response.status);
+                        
+                        if (response.ok) {
+                            const data = await response.json();
+                            console.log('[DEBUG_LOG] /api/login response data:', data);
+                            // Small delay to ensure session is ready
+                            await new Promise(resolve => setTimeout(resolve, 300));
+                            await checkAuth();
+                            if (isAuthenticated.value) {
+                                fetchRecords();
+                                showNotification('success', 'Logged in successfully');
+                            } else {
+                                loginError.value = 'Failed to retrieve user information after login';
+                            }
+                        } else {
+                            console.log('[DEBUG_LOG] Login failed with status:', response.status);
+                            loginError.value = 'Invalid username or password';
+                        }
+                    } catch (e) {
+                        console.error('[DEBUG_LOG] Login error:', e);
+                        loginError.value = 'An error occurred during login';
+                    } finally {
+                        isLoggingIn.value = false;
+                    }
+                };
+
+                const handleLogout = async () => {
+                    console.log('[DEBUG_LOG] Logging out...');
+                    try {
+                        const response = await fetch('/api/logout', { 
+                            method: 'POST',
+                            credentials: 'same-origin'
+                        });
+                        if (response.ok) {
+                            isAuthenticated.value = false;
+                            currentUser.value = null;
+                            showNotification('success', 'Logged out successfully');
+                            console.log('[DEBUG_LOG] Logout successful');
+                        }
+                    } catch (e) {
+                        console.error('[DEBUG_LOG] Logout error:', e);
+                        showNotification('error', 'Logout failed');
+                    }
+                };
+
+                const fetchUsers = async () => {
+                    try {
+                        const response = await fetch('/api/v1/users', { credentials: 'same-origin' });
+                        if (response.ok) {
+                            users.value = await response.json();
+                        }
+                    } catch (e) {
+                        console.error('Failed to fetch users', e);
+                    }
+                };
+
+                const openUserCreateModal = () => {
+                    isUserEditing.value = false;
+                    userForm.value = { id: null, username: '', email: '', password: '', departments: '' };
+                    isUserModalOpen.value = true;
+                };
+
+                const openUserEditModal = (u) => {
+                    isUserEditing.value = true;
+                    userForm.value = { ...u, password: '' };
+                    isUserModalOpen.value = true;
+                };
+
+                const closeUserModal = () => {
+                    isUserModalOpen.value = false;
+                };
+
+                const saveUser = async () => {
+                    const method = isUserEditing.value ? 'PUT' : 'POST';
+                    const url = isUserEditing.value ? `/api/v1/users/${userForm.value.id}` : '/api/v1/users';
+                    
+                    try {
+                        const response = await fetch(url, {
+                            method: method,
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(userForm.value),
+                            credentials: 'same-origin'
+                        });
+                        
+                        if (response.ok) {
+                            fetchUsers();
+                            closeUserModal();
+                            showNotification('success', `User ${isUserEditing.value ? 'updated' : 'created'} successfully`);
+                        } else {
+                            showNotification('error', 'Failed to save user');
+                        }
+                    } catch (e) {
+                        showNotification('error', 'An error occurred while saving user');
+                    }
+                };
+
+                const deleteUser = async (id) => {
+                    if (!confirm('Are you sure you want to delete this user?')) return;
+                    try {
+                        const response = await fetch(`/api/v1/users/${id}`, { 
+                            method: 'DELETE',
+                            credentials: 'same-origin'
+                        });
+                        if (response.ok) {
+                            fetchUsers();
+                            showNotification('success', 'User deleted successfully');
+                        } else {
+                            showNotification('error', 'Failed to delete user');
+                        }
+                    } catch (e) {
+                        showNotification('error', 'An error occurred while deleting user');
+                    }
+                };
+
+                const fetchDashboardStats = async () => {
+                    console.log('[DEBUG_LOG] Fetching dashboard stats...');
+                    try {
+                        const response = await fetch('/api/v1/openslo/dashboard-stats', { credentials: 'same-origin' });
+                        console.log('[DEBUG_LOG] /api/v1/openslo/dashboard-stats response status:', response.status);
+                        if (response.ok) {
+                            dashboardStats.value = await response.json();
+                            console.log('[DEBUG_LOG] Dashboard stats fetched:', dashboardStats.value);
+                        } else {
+                            console.log('[DEBUG_LOG] Failed to fetch dashboard stats (not ok)');
+                        }
+                    } catch (err) {
+                        console.error('[DEBUG_LOG] Failed to fetch dashboard stats error:', err);
+                    }
+                };
+
+                const toggleSelectAllReports = () => {
+                    if (isAllReportsSelected.value) {
+                        selectedReportRecords.value = [];
+                    } else {
+                        selectedReportRecords.value = reportableRecords.value.map(r => r.id);
+                    }
+                };
+
+                const toggleReportRecord = (id) => {
+                    const index = selectedReportRecords.value.indexOf(id);
+                    if (index > -1) {
+                        selectedReportRecords.value.splice(index, 1);
+                    } else {
+                        selectedReportRecords.value.push(id);
+                    }
+                };
+
+                const generateReport = async () => {
+                    if (selectedReportRecords.value.length === 0) {
+                        showNotification('warning', 'Please select at least one record to generate a report.');
+                        return;
+                    }
+
+                    isGeneratingReport.value = true;
+                    try {
+                        const response = await fetch('/api/v1/reports/pdf', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify(selectedReportRecords.value),
+                            credentials: 'same-origin'
+                        });
+
+                        if (response.ok) {
+                            const blob = await response.blob();
+                            const url = window.URL.createObjectURL(blob);
+                            const a = document.createElement('a');
+                            a.href = url;
+                            a.download = `MeloSlo_Report_${new Date().toISOString().slice(0, 10)}.pdf`;
+                            document.body.appendChild(a);
+                            a.click();
+                            window.URL.revokeObjectURL(url);
+                            showNotification('success', 'Report generated successfully!');
+                        } else {
+                            showNotification('error', 'Failed to generate report.');
+                        }
+                    } catch (err) {
+                        console.error('Error generating report:', err);
+                        showNotification('error', 'An error occurred during report generation.');
+                    } finally {
+                        isGeneratingReport.value = false;
+                    }
+                };
+
+                const fetchRecords = async () => {
+                    console.log('[DEBUG_LOG] Fetching records...');
+                    try {
+                        const response = await fetch('/api/v1/openslo', { credentials: 'same-origin' });
+                        if (response.ok) {
+                            records.value = await response.json();
+                            console.log('[DEBUG_LOG] Records fetched:', records.value.length);
+                            fetchDashboardStats();
+                        } else {
+                            console.log('[DEBUG_LOG] Failed to fetch records (not ok):', response.status);
+                        }
+                    } catch (err) {
+                        console.error('[DEBUG_LOG] Error fetching records:', err);
+                        showNotification('error', 'Failed to fetch records');
+                    }
+                };
+
+                const openCreateModal = (kind = 'SLO') => {
+                    isEditing.value = false;
+                    selectedTemplate.value = '';
+                    form.value = {
+                        id: null,
+                        name: '',
+                        displayName: '',
+                        apiVersion: 'openslo/v1',
+                        kind: kind,
+                        spec: '',
+                        department: '',
+                        ital: '',
+                        refreshRate: 60,
+                        lastRefreshTime: null,
+                        service: null,
+                        datasource: null,
+                        alertingSource: null,
+                        slis: [],
+                        slos: [],
+                        alertUrl: '',
+                        alertPayload: '{\n  "slo": "${SLO_NAME}",\n  "status": "${SLO_STATUS}",\n  "value": "${SLO_VALUE}"\n}'
+                    };
+                    isModalOpen.value = true;
+                };
+
+                const openEditModal = (record) => {
+                    isEditing.value = true;
+                    selectedTemplate.value = '';
+                    form.value = { 
+                        ...record,
+                        slis: record.slis ? record.slis.map(s => ({ id: s.id })) : [],
+                        slos: record.slos ? record.slos.map(s => ({ id: s.id })) : [],
+                        service: record.service ? { id: record.service.id } : null,
+                        datasource: record.datasource ? { id: record.datasource.id } : null,
+                        alertingSource: record.alertingSource ? { id: record.alertingSource.id } : null
+                    };
+                    isModalOpen.value = true;
+                };
+
+                const closeModal = () => {
+                    isModalOpen.value = false;
+                };
+
+                const saveSlo = async () => {
+                    const method = isEditing.value ? 'PUT' : 'POST';
+                    const url = isEditing.value ? `/api/v1/openslo/${form.value.id}` : '/api/v1/openslo';
+
+                    try {
+                        const response = await fetch(url, {
+                            method,
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(form.value),
+                            credentials: 'same-origin'
+                        });
+
+                        if (response.ok) {
+                            showNotification('success', `Record ${isEditing.value ? 'updated' : 'created'} successfully`);
+                            closeModal();
+                            fetchRecords();
+                        } else {
+                            showNotification('error', 'Failed to save record');
+                        }
+                    } catch (err) {
+                        showNotification('error', 'An error occurred');
+                    }
+                };
+
+                const deleteSlo = async (id) => {
+                    if (!confirm('Are you sure you want to delete this record?')) return;
+
+                    try {
+                        const response = await fetch(`/api/v1/openslo/${id}`, { 
+                            method: 'DELETE',
+                            credentials: 'same-origin'
+                        });
+                        if (response.ok) {
+                            showNotification('success', 'Record deleted');
+                            fetchRecords();
+                            if (selectedSlo.value && selectedSlo.value.id === id) {
+                                currentView.value = 'dashboard';
+                            }
+                        }
+                    } catch (err) {
+                        showNotification('error', 'Failed to delete record');
+                    }
+                };
+
+                const viewDetails = (slo) => {
+                    selectedSlo.value = slo;
+                    selectedSloReport.value = null;
+                    currentView.value = 'details';
+                    
+                    fetch(`/api/v1/openslo/${slo.id}/report`, { credentials: 'same-origin' })
+                        .then(res => res.ok ? res.json() : null)
+                        .then(report => {
+                            selectedSloReport.value = report;
+                            nextTick(() => {
+                                renderChart(report, '#chart');
+                                if (window.Prism) window.Prism.highlightAll();
+                            });
+                        })
+                        .catch(() => {
+                            nextTick(() => {
+                                renderChart(null, '#chart');
+                                if (window.Prism) window.Prism.highlightAll();
+                            });
+                        });
+                };
+
+                const viewSliDetails = (sli) => {
+                    selectedSli.value = sli;
+                    selectedSliReport.value = null;
+                    currentView.value = 'sli-details';
+
+                    fetch(`/api/v1/openslo/${sli.id}/sli-report`, { credentials: 'same-origin' })
+                        .then(res => res.ok ? res.json() : null)
+                        .then(report => {
+                            selectedSliReport.value = report;
+                            nextTick(() => {
+                                renderChart(report, '#sli-chart');
+                                if (window.Prism) window.Prism.highlightAll();
+                            });
+                        })
+                        .catch(() => {
+                            nextTick(() => {
+                                renderChart(null, '#sli-chart');
+                                if (window.Prism) window.Prism.highlightAll();
+                            });
+                        });
+                };
+
+                const viewServiceDetails = (service) => {
+                    selectedService.value = service;
+                    selectedServiceReport.value = null;
+                    currentView.value = 'service-details';
+
+                    fetch(`/api/v1/openslo/${service.id}/service-report`, { credentials: 'same-origin' })
+                        .then(res => res.ok ? res.json() : null)
+                        .then(report => {
+                            selectedServiceReport.value = report;
+                            if (window.Prism) nextTick(() => window.Prism.highlightAll());
+                        })
+                        .catch(() => {
+                            if (window.Prism) nextTick(() => window.Prism.highlightAll());
+                        });
+                };
+
+                const getStatusText = (slo) => {
+                    return slo.status || 'Healthy';
+                };
+
+                const getStatusClass = (slo) => {
+                    const status = getStatusText(slo);
+                    if (status === 'Healthy') return 'text-green-600';
+                    if (status === 'Warning') return 'text-yellow-600';
+                    return 'text-red-600';
+                };
+
+                const showNotification = (type, message) => {
+                    console.log(`[DEBUG_LOG] Showing notification: [${type}] ${message}`);
+                    notification.value = { type, message };
+                    setTimeout(() => {
+                        notification.value = null;
+                    }, 3000);
+                };
+
+                const renderChart = (report, selector = '#chart') => {
+                    const chartContainer = document.querySelector(selector);
+                    if (!chartContainer) return;
+                    chartContainer.innerHTML = '';
+
+                    let seriesData = [100, 98, 97, 95, 94, 93, 91, 88, 85, 82, 80, 78, 75, 74];
+                    let categories = Array.from({length: 14}, (_, i) => `Day ${i+1}`);
+                    let seriesName = 'Remaining Budget';
+                    let targetValue = null;
+
+                    if (report && report.recentMetrics && report.recentMetrics.length > 0) {
+                        seriesData = report.recentMetrics.map(m => (m.value * 100).toFixed(2)).reverse();
+                        categories = report.recentMetrics.map(m => new Date(m.timestamp).toLocaleDateString()).reverse();
+                        seriesName = 'SLI Value (%)';
+                        if (report.target !== undefined && report.target !== null) {
+                            targetValue = report.target * 100;
+                        }
+                    }
+
+                    let fillConfig = {
+                        type: 'gradient',
+                        gradient: {
+                            shadeIntensity: 1,
+                            opacityFrom: 0.45,
+                            opacityTo: 0.05,
+                            stops: [20, 100, 100, 100]
+                        }
+                    };
+                    let annotations = {};
+
+                    if (targetValue !== null) {
+                        const targetOffset = Math.max(0, Math.min(100, 100 - targetValue));
+                        fillConfig = {
+                            type: 'gradient',
+                            gradient: {
+                                shadeIntensity: 1,
+                                type: 'vertical',
+                                colorStops: [
+                                    { offset: 0, color: '#10b981', opacity: 0.5 },
+                                    { offset: targetOffset, color: '#10b981', opacity: 0.5 },
+                                    { offset: targetOffset, color: '#ef4444', opacity: 0.5 },
+                                    { offset: 100, color: '#ef4444', opacity: 0.5 }
+                                ]
+                            }
+                        };
+                        annotations = {
+                            yaxis: [{
+                                y: targetValue,
+                                borderColor: '#10b981',
+                                label: {
+                                    borderColor: '#10b981',
+                                    style: { color: '#fff', background: '#10b981' },
+                                    text: `Target ${targetValue.toFixed(2)}%`
+                                }
+                            }]
+                        };
+                    }
+
+                    const options = {
+                        series: [{
+                            name: seriesName,
+                            data: seriesData
+                        }],
+                        chart: {
+                            type: 'area',
+                            height: 300,
+                            toolbar: { show: false },
+                            zoom: { enabled: false }
+                        },
+                        dataLabels: { enabled: false },
+                        stroke: { curve: 'smooth', width: 2 },
+                        colors: targetValue !== null ? ['#10b981'] : ['#3b82f6'],
+                        fill: fillConfig,
+                        annotations: annotations,
+                        xaxis: {
+                            categories: categories,
+                            labels: { show: categories.length <= 10 },
+                            axisBorder: { show: false },
+                            axisTicks: { show: false }
+                        },
+                        yaxis: {
+                            min: 0,
+                            max: 100,
+                            labels: {
+                                formatter: (val) => parseFloat(val).toFixed(2) + '%'
+                            }
+                        },
+                        grid: {
+                            borderColor: '#f1f5f9'
+                        }
+                    };
+
+                    const chart = new ApexCharts(chartContainer, options);
+                    chart.render();
+                };
+
+                const getMetricSources = (spec) => {
+                    if (!spec) return [];
+                    try {
+                        const parsed = jsyaml.load(spec);
+                        if (!parsed || !parsed.spec) return [];
+                        const sources = parsed.spec.metricSources;
+                        if (Array.isArray(sources)) {
+                            return sources.map(s => ({
+                                type: s.type || 'N/A',
+                                query: s.spec?.query || 'N/A'
+                            }));
+                        }
+                        return [];
+                    } catch (e) {
+                        return [];
+                    }
+                };
+
+                const getSpecField = (spec, path) => {
+                    if (!spec) return null;
+                    try {
+                        const parsed = jsyaml.load(spec);
+                        if (!parsed || !parsed.spec) return null;
+                        return path.split('.').reduce((o, i) => o ? o[i] : null, parsed.spec);
+                    } catch (e) {
+                        return null;
+                    }
+                };
+
+                const runQuery = async () => {
+                    isQueryLoading.value = true;
+                    queryError.value = '';
+                    queryResults.value = [];
+                    try {
+                        const response = await fetch('/api/v1/database/query', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ sql: querySql.value }),
+                            credentials: 'same-origin'
+                        });
+                        const data = await response.json();
+                        if (response.ok) {
+                            queryResults.value = data;
+                        } else {
+                            queryError.value = data.message || 'Failed to execute query';
+                        }
+                    } catch (err) {
+                        queryError.value = 'An error occurred while executing the query';
+                    } finally {
+                        isQueryLoading.value = false;
+                    }
+                };
+
+                const fetchTables = () => {
+                    fetch('/api/v1/database/tables', { credentials: 'same-origin' })
+                        .then(res => res.json())
+                        .then(data => dbTables.value = data)
+                        .catch(err => console.error('Failed to fetch tables', err));
+                };
+
+                const viewTableStructure = (tableName) => {
+                    selectedTableName.value = tableName;
+                    fetch(`/api/v1/database/tables/${tableName}/structure`, { credentials: 'same-origin' })
+                        .then(res => res.json())
+                        .then(data => {
+                            selectedTableStructure.value = data;
+                            queryResults.value = [];
+                            queryError.value = '';
+                        })
+                        .catch(err => console.error('Failed to fetch table structure', err));
+                };
+
+                watch(currentView, (newView) => {
+                    if (newView === 'query') {
+                        fetchTables();
+                    }
+                });
+
+                onMounted(async () => {
+                    console.log('[DEBUG_LOG] App mounted, checking auth...');
+                    await checkAuth();
+                    console.log('[DEBUG_LOG] Auth status:', isAuthenticated.value);
+                    if (isAuthenticated.value) {
+                        fetchRecords();
+                    }
+                });
+
+                return {
+                    isAuthenticated,
+                    isAdmin,
+                    isLoggingIn,
+                    currentUser,
+                    loginForm,
+                    loginError,
+                    users,
+                    isUserModalOpen,
+                    isUserEditing,
+                    userForm,
+                    dashboardStats,
+                    handleLogin,
+                    handleLogout,
+                    openUserCreateModal,
+                    openUserEditModal,
+                    closeUserModal,
+                    saveUser,
+                    deleteUser,
+                    currentView,
+                    viewTitle,
+                    records,
+                    services,
+                    slos,
+                    slis,
+                    datasources,
+                    searchQuery,
+                    filteredSlos,
+                    healthyCount,
+                    warningCount,
+                    breachingCount,
+                    isModalOpen,
+                    isDsModalOpen,
+                    isApiModalOpen,
+                    selectedApi,
+                    apiEndpoints,
+                    openApiModal,
+                    closeApiModal,
+                    isEditing,
+                    form,
+                    selectedSlo,
+                    selectedSloReport,
+                    selectedSli,
+                    selectedSliReport,
+                    selectedService,
+                    selectedServiceReport,
+                    selectedDs,
+                    notification,
+                    querySql,
+                    queryResults,
+                    queryError,
+                    isQueryLoading,
+                    dbTables,
+                    selectedTableStructure,
+                    selectedTableName,
+                    selectedTemplate,
+                    alertingTemplates,
+                    dataSourceTemplates,
+                    applyTemplate,
+                    runQuery,
+                    fetchTables,
+                    viewTableStructure,
+                    openCreateModal,
+                    openEditModal,
+                    openDsModal,
+                    closeDsModal,
+                    closeModal,
+                    saveSlo,
+                    deleteSlo,
+                    viewDetails,
+                    viewSliDetails,
+                    viewServiceDetails,
+                    getStatusText,
+                    getStatusClass,
+                    getSpecField,
+                    getMetricSources,
+                    selectedReportRecords,
+                    isGeneratingReport,
+                    reportableRecords,
+                    isAllReportsSelected,
+                    toggleSelectAllReports,
+                    toggleReportRecord,
+                    generateReport
+                };
+            }
+        }).mount('#app');
+    </script>
+</body>
+</html>
