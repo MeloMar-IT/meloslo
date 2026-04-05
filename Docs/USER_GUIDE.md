@@ -17,6 +17,41 @@ To access MeloSlo, you must first log in using your credentials. The platform su
 *   **Default Administrator**: `admin` / `admin`
 *   **Test User**: `testuser` / `testuser`
 
+### 1.2 Configuration Modes (Test vs Live)
+
+The application features a configuration option to toggle between a test environment and a live environment. This is controlled by the `app.datasource.mode` property.
+
+- **Test Mode**: (`app.datasource.mode=test`) Use this mode to explore the application with simulated data. The system will automatically populate the database with sample SLOs, SLIs, and metrics.
+- **Live Mode**: (`app.datasource.mode=live`) Use this mode for real-world monitoring. In live mode, the system expects to connect to the actual endpoints defined in your DataSources to fetch real-time metrics. Automated sample data generation is disabled to preserve your production configuration.
+
+To change the mode, modify `src/main/resources/application.properties`:
+```properties
+# Toggle between 'test' (simulated) and 'live' (real endpoints)
+app.datasource.mode=live
+```
+
+### 1.3 DTAP Environments (Dev, Test, Acceptance, Prod)
+
+MeloSlo supports multi-environment configuration (DTAP) using Spring Boot's built-in profile mechanism.
+
+#### Working with Profiles
+
+Environment-specific settings can be defined in separate property files:
+- `application-dev.properties`: Settings for local development.
+- `application-prod.properties`: Settings for production deployments.
+
+To activate a specific profile at startup:
+```bash
+java -Dspring.profiles.active=prod -jar meloslo.jar
+```
+
+#### Custom External Properties
+
+To use an external property file at startup, use the `--spring.config.location` argument:
+```bash
+java -jar meloslo.jar --spring.config.location=file:/etc/meloslo/custom-application.properties
+```
+
 ---
 
 ## 2. Navigation & Dashboard

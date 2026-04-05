@@ -78,6 +78,13 @@ The application features a sidebar providing access to:
 - **Administrator**: Full system access.
 - **Standard User**: Access limited to assigned departments. Users only see records matching their department (e.g., `Finance, Engineering`).
 
+### Configuration Modes (Test vs Live)
+
+The system behavior is controlled by the `app.datasource.mode` configuration in `application.properties`:
+
+- **`test` (Default)**: Generates simulated metric data (0.9–1.0 range). Re-initializes the database with sample data if state is invalid. Ideal for local development.
+- **`live`**: Intended for connection to real external endpoints. Only basic system users are seeded, preserving any production-grade configuration.
+
 ---
 
 ## 🔌 API Reference

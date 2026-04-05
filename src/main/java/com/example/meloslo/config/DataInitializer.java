@@ -10,6 +10,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -17,6 +18,9 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 
 @Configuration
 public class DataInitializer {
+    
+    @Value("${app.datasource.mode:test}")
+    private String datasourceMode;
 
     private static final Logger log = LoggerFactory.getLogger(DataInitializer.class);
 
@@ -81,8 +85,13 @@ public class DataInitializer {
             }
 
             if (needsInitialization) {
-                log.info("Database state invalid or incomplete. Reloading test data from scratch...");
-                reloadDatabase(repository, metricRepository, userRepository, passwordEncoder);
+                if ("live".equalsIgnoreCase(datasourceMode)) {
+                    log.info("Database state invalid or incomplete, but datasource mode is LIVE. Seeding basic system users only.");
+                    seedSystemUsers(userRepository, passwordEncoder);
+                } else {
+                    log.info("Database state invalid or incomplete. Reloading test data from scratch...");
+                    reloadDatabase(repository, metricRepository, userRepository, passwordEncoder);
+                }
             } else {
                 log.info("Database verification successful. All test data is correct.");
             }
@@ -182,6 +191,15 @@ public class DataInitializer {
         seedMetrics(metricRepository, engineeringLatencySli, prometheusSource);
         
         log.info("Initialization complete.");
+    }
+
+    private void seedSystemUsers(UserRepository userRepository, PasswordEncoder passwordEncoder) {
+        if (userRepository.findByUsername("admin").isEmpty()) {
+            userRepository.save(new User("admin", passwordEncoder.encode("admin"), "admin@meloslo.com", null));
+        }
+        if (userRepository.findByUsername("testuser").isEmpty()) {
+            userRepository.save(new User("testuser", passwordEncoder.encode("testuser"), "testuser@finance.com", "Finance,Engineering"));
+        }
     }
 
     private OpenSlo createSli(OpenSloRepository repository, String name, String displayName, String query, OpenSlo datasource, String department) {
