@@ -2,6 +2,9 @@
 
 Welcome to the **MeloSlo** user guide. MeloSlo is a comprehensive platform designed for managing OpenSLO records (Business Services, SLIs, and SLOs) through a professional interface. This guide will walk you through the key features and workflows of the application.
 
+## Terms of Use & Disclaimer
+MeloSlo is an open-source tool provided **"as is" and on your own risk**. The developers are not liable for any data loss, system instability, or other issues resulting from its use. By using this platform, you agree to these terms.
+
 ---
 
 ## 1. Getting Started
