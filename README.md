@@ -34,7 +34,7 @@ The application features a sidebar with the following views:
 - **SLIs**: Manage your service level indicators.
 - **Data Sources**: Manage your data source records (e.g., Prometheus).
 - **Alerting**: Manage your alerting source records (e.g., Slack webhooks) to receive notifications when SLOs are breached.
-- **Documentation**: Access this documentation directly in the app.
+- **Documentation**: Access this documentation directly in the app. For a comprehensive walkthrough of features, see the [MeloSlo User Guide](./Docs/USER_GUIDE.md).
 - **Query Tool**: Execute raw SQL queries against the database (Administrator only). Use this tool to inspect table structures (`api/v1/database/tables`) and verify raw data records across `OPEN_SLO`, `SLI_METRIC`, and `USER` tables. Only `SELECT` queries are permitted for security.
 - **User Admin**: Manage user accounts and permissions (Administrator only).
 - **Reports**: Generate annual performance reports for Services and SLOs in PDF format, including performance graphs for the last year. Reports are compliance-aware and automatically handle data gaps by visualizing them as zero-performance periods.
