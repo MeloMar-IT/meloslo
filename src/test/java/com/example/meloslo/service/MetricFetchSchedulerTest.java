@@ -31,18 +31,22 @@ class MetricFetchSchedulerTest {
     @Mock
     private AlertingService alertingService;
 
+    @Mock
+    private TaskManagementService taskManagementService;
+
     private MetricFetchScheduler scheduler;
 
     @BeforeEach
     void setUp() {
         MockitoAnnotations.openMocks(this);
-        scheduler = new MetricFetchScheduler(openSloRepository, metricRepository, openSloService, alertingService);
+        scheduler = new MetricFetchScheduler(openSloRepository, metricRepository, openSloService, alertingService, taskManagementService);
     }
 
     @Test
     void shouldFetchMetricsWhenRefreshIsDue() {
         // Arrange
         OpenSlo dataSource = new OpenSlo();
+        dataSource.setId(10L);
         dataSource.setKind("DataSource");
         dataSource.setName("test-ds");
         dataSource.setRefreshRate(15);
@@ -60,6 +64,11 @@ class MetricFetchSchedulerTest {
         scheduler.fetchMetrics();
 
         // Assert
+        ArgumentCaptor<Runnable> runnableCaptor = ArgumentCaptor.forClass(Runnable.class);
+        verify(taskManagementService).runAsyncTask(eq("Fetch-10"), runnableCaptor.capture());
+        
+        runnableCaptor.getValue().run();
+
         verify(metricRepository, atLeastOnce()).save(any(SliMetric.class));
         verify(openSloRepository).save(dataSource);
         assertNotNull(dataSource.getLastRefreshTime());
@@ -106,6 +115,7 @@ class MetricFetchSchedulerTest {
     void shouldFetchMetricsIfNeverRefreshed() {
         // Arrange
         OpenSlo dataSource = new OpenSlo();
+        dataSource.setId(11L);
         dataSource.setKind("DataSource");
         dataSource.setName("test-ds");
         dataSource.setRefreshRate(15);
@@ -122,6 +132,10 @@ class MetricFetchSchedulerTest {
         scheduler.fetchMetrics();
 
         // Assert
+        ArgumentCaptor<Runnable> runnableCaptor = ArgumentCaptor.forClass(Runnable.class);
+        verify(taskManagementService).runAsyncTask(eq("Fetch-11"), runnableCaptor.capture());
+        runnableCaptor.getValue().run();
+
         verify(metricRepository, atLeastOnce()).save(any(SliMetric.class));
         verify(openSloRepository).save(dataSource);
     }
