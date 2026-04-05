@@ -53,7 +53,7 @@ When creating or editing a record, you will be presented with several options:
 - **DataSource and Alerting Templates**: When creating a `DataSource` or `AlertingSource`, you can select from pre-defined templates for popular providers (Prometheus, Slack, PagerDuty, etc.) to quickly populate the specification and configuration fields.
 - **Refresh Rate**: For `DataSource` records, you can specify a refresh rate in minutes (minimum 15 minutes, defaults to 60). The application automatically fetches and updates metrics according to this schedule.
 - **Department**: The organizational unit responsible for this record.
-- **IT Area Lead (ITAL)**: The person responsible for the IT area.
+- **Manager**: The person responsible for the IT area.
 - **Specification**: The full OpenSLO compliant specification in YAML or JSON format. Content from this field is parsed and displayed in relevant views.
 
 ### Relationships
@@ -370,7 +370,7 @@ Stores all core OpenSLO entities.
 - **`display_name`**: (String) Friendly name for display.
 - **`spec`**: (Text) The full OpenSLO specification in YAML/JSON.
 - **`department`**: (String) Organizational unit metadata.
-- **`ital`**: (String) IT Area Lead metadata.
+- **`manager`**: (String) Manager metadata.
 - **`refresh_rate`**: (Integer) Data collection interval for DataSources.
 - **`last_refresh_time`**: (DateTime) Last time this DataSource was synced.
 - **`alert_url`**: (String) The webhook URL for AlertingSources.

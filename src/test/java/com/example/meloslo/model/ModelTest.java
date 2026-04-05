@@ -28,13 +28,13 @@ class ModelTest {
         OpenSlo record = new OpenSlo("openslo/v1", "SLO", "Test", "Test", "{}");
         record.setId(1L);
         record.setDepartment("Finance");
-        record.setItal("Jane Doe");
+        record.setManager("Jane Doe");
         record.setRefreshRate(15);
         record.setLastRefreshTime(LocalDateTime.now());
 
         assertEquals(1L, record.getId());
         assertEquals("Finance", record.getDepartment());
-        assertEquals("Jane Doe", record.getItal());
+        assertEquals("Jane Doe", record.getManager());
         assertEquals(15, record.getRefreshRate());
         assertNotNull(record.getLastRefreshTime());
     }

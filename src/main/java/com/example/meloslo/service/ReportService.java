@@ -107,7 +107,7 @@ public class ReportService {
         document.add(recordHeader);
         
         document.add(new Paragraph("System ID: " + record.getName(), normalFont));
-        document.add(new Paragraph("Department: " + record.getDepartment() + " | ITAL: " + record.getItal(), normalFont));
+        document.add(new Paragraph("Department: " + record.getDepartment() + " | Manager: " + record.getManager(), normalFont));
         document.add(new Chunk("\n"));
 
         if ("Service".equalsIgnoreCase(record.getKind())) {

@@ -20,7 +20,6 @@ import jakarta.validation.constraints.NotBlank;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Objects;
 
 @Entity
 @Table(name = "openslo_records")
@@ -51,7 +50,7 @@ public class OpenSlo {
 
     private String department;
 
-    private String ital; // IT Area Lead
+    private String manager; // Manager
     
     private Integer refreshRate = 60; // Default 60 minutes
     
@@ -178,12 +177,12 @@ public class OpenSlo {
         this.department = department;
     }
 
-    public String getItal() {
-        return ital;
+    public String getManager() {
+        return manager;
     }
 
-    public void setItal(String ital) {
-        this.ital = ital;
+    public void setManager(String manager) {
+        this.manager = manager;
     }
 
     public Integer getRefreshRate() {

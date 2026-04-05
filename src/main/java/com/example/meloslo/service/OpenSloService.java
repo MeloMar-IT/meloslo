@@ -168,7 +168,7 @@ public class OpenSloService {
                     record.setDisplayName(updatedRecord.getDisplayName());
                     record.setSpec(updatedRecord.getSpec());
                     record.setDepartment(updatedRecord.getDepartment());
-                    record.setItal(updatedRecord.getItal());
+                    record.setManager(updatedRecord.getManager());
                     record.setRefreshRate(updatedRecord.getRefreshRate());
                     record.setLastRefreshTime(updatedRecord.getLastRefreshTime());
                     record.setAlertUrl(updatedRecord.getAlertUrl());

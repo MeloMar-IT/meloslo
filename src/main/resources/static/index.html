@@ -493,8 +493,8 @@
                                             <p class="text-sm font-medium">{{ selectedSli.department || 'N/A' }}</p>
                                         </div>
                                         <div>
-                                            <p class="text-xs text-slate-500 uppercase font-bold tracking-wider">ITAL (Lead)</p>
-                                            <p class="text-sm font-medium">{{ selectedSli.ital || 'N/A' }}</p>
+                                            <p class="text-xs text-slate-500 uppercase font-bold tracking-wider">Manager</p>
+                                            <p class="text-sm font-medium">{{ selectedSli.manager || 'N/A' }}</p>
                                         </div>
                                         <div>
                                             <p class="text-xs text-slate-500 uppercase font-bold tracking-wider">System Name</p>
@@ -630,7 +630,7 @@
                                         <th class="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Name</th>
                                         <th class="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider text-center">URL</th>
                                         <th class="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Department</th>
-                                        <th class="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">ITAL</th>
+                                        <th class="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Manager</th>
                                         <th class="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider text-right">Actions</th>
                                     </tr>
                                 </thead>
@@ -644,7 +644,7 @@
                                         </td>
                                         <td class="px-6 py-4 text-sm text-slate-500 truncate max-w-xs">{{ source.alertUrl }}</td>
                                         <td class="px-6 py-4 text-sm text-slate-600">{{ source.department }}</td>
-                                        <td class="px-6 py-4 text-sm text-slate-600">{{ source.ital }}</td>
+                                        <td class="px-6 py-4 text-sm text-slate-600">{{ source.manager }}</td>
                                         <td class="px-6 py-4 text-right space-x-2">
                                             <button class="text-slate-400 hover:text-blue-600 transition-colors" @click.stop="openEditModal(source)">
                                                 <i class="fas fa-edit"></i>
@@ -754,8 +754,8 @@
                                             <p class="text-sm font-medium">{{ selectedSlo.department || 'N/A' }}</p>
                                         </div>
                                         <div>
-                                            <p class="text-xs text-slate-500 uppercase font-bold tracking-wider">ITAL (Lead)</p>
-                                            <p class="text-sm font-medium">{{ selectedSlo.ital || 'N/A' }}</p>
+                                            <p class="text-xs text-slate-500 uppercase font-bold tracking-wider">Manager</p>
+                                            <p class="text-sm font-medium">{{ selectedSlo.manager || 'N/A' }}</p>
                                         </div>
                                         <div>
                                             <p class="text-xs text-slate-500 uppercase font-bold tracking-wider">System Name</p>
@@ -922,7 +922,7 @@
                                     </div>
                                     <div>
                                         <h4 class="font-bold text-slate-800 mb-1">4. Manage Metadata</h4>
-                                        <p class="text-sm text-slate-600">Each record can be tagged with a <strong>Department</strong> and an <strong>IT Area Lead (ITAL)</strong> to ensure clear ownership and accountability.</p>
+                                        <p class="text-sm text-slate-600">Each record can be tagged with a <strong>Department</strong> and a <strong>Manager</strong> to ensure clear ownership and accountability.</p>
                                     </div>
                                     <div>
                                         <h4 class="font-bold text-slate-800 mb-1">5. Generate Reports</h4>
@@ -1093,7 +1093,7 @@ spec:
                                             <div class="p-2 bg-slate-50 rounded border border-slate-100"><strong>display_name:</strong> Human Name</div>
                                             <div class="p-2 bg-slate-50 rounded border border-slate-100"><strong>spec:</strong> Raw YAML/JSON Config</div>
                                             <div class="p-2 bg-slate-50 rounded border border-slate-100"><strong>department:</strong> Assigned Group</div>
-                                            <div class="p-2 bg-slate-50 rounded border border-slate-100"><strong>ital:</strong> IT Area Lead</div>
+                                            <div class="p-2 bg-slate-50 rounded border border-slate-100"><strong>manager:</strong> Manager</div>
                                             <div class="p-2 bg-slate-50 rounded border border-slate-100"><strong>alert_url:</strong> Webhook URL</div>
                                             <div class="p-2 bg-slate-50 rounded border border-slate-100"><strong>alert_payload:</strong> JSON Template</div>
                                             <div class="p-2 bg-slate-50 rounded border border-slate-100"><strong>service_id:</strong> FK (Service Parent)</div>
@@ -1382,9 +1382,9 @@ spec:
                             <input type="text" v-model="form.department" placeholder="e.g. Finance, Platform" class="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none text-sm">
                         </div>
                         <div class="col-span-1">
-                            <label class="block text-sm font-bold text-slate-700 mb-1">IT Area Lead (ITAL)</label>
-                            <p class="text-[10px] text-slate-500 mb-2">The lead responsible for the IT area this record belongs to.</p>
-                            <input type="text" v-model="form.ital" placeholder="e.g. John Doe" class="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none text-sm">
+                            <label class="block text-sm font-bold text-slate-700 mb-1">Manager</label>
+                            <p class="text-[10px] text-slate-500 mb-2">The person responsible for this record.</p>
+                            <input type="text" v-model="form.manager" placeholder="e.g. John Doe" class="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none text-sm">
                         </div>
                         <div v-if="form.kind === 'DataSource'" class="col-span-1">
                             <label class="block text-sm font-bold text-slate-700 mb-1">Refresh Rate (minutes)</label>
@@ -1526,8 +1526,8 @@ spec:
                                         <p class="text-sm font-semibold text-slate-800">{{ selectedDs.department || 'N/A' }}</p>
                                     </div>
                                     <div>
-                                        <p class="text-xs text-slate-500 mb-1">ITAL (IT Area Lead)</p>
-                                        <p class="text-sm font-semibold text-slate-800">{{ selectedDs.ital || 'N/A' }}</p>
+                                        <p class="text-xs text-slate-500 mb-1">Manager</p>
+                                        <p class="text-sm font-semibold text-slate-800">{{ selectedDs.manager || 'N/A' }}</p>
                                     </div>
                                 </div>
                             </div>
@@ -2000,7 +2000,7 @@ spec:
                     kind: 'SLO',
                     spec: '',
                     department: '',
-                    ital: '',
+                    manager: '',
                     refreshRate: 60,
                     service: null,
                     datasource: null,
@@ -2316,7 +2316,7 @@ spec:
                         kind: kind,
                         spec: '',
                         department: '',
-                        ital: '',
+                        manager: '',
                         refreshRate: 60,
                         lastRefreshTime: null,
                         service: null,

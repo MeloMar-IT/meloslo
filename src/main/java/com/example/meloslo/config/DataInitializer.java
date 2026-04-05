@@ -103,21 +103,21 @@ public class DataInitializer {
         OpenSlo paymentService = new OpenSlo("openslo/v1", "Service", "payment-service", "Payment Service", 
             "apiVersion: openslo/v1\nkind: Service\nmetadata:\n  name: payment-service\nspec:\n  description: Core payment processing service");
         paymentService.setDepartment("Finance");
-        paymentService.setItal("Jane Doe");
+        paymentService.setManager("Jane Doe");
         paymentService = repository.save(paymentService);
 
         // 2. Create Engineering Service and SLOs
         OpenSlo engineeringService = new OpenSlo("openslo/v1", "Service", "engineering-core", "Engineering Core", 
             "apiVersion: openslo/v1\nkind: Service\nmetadata:\n  name: engineering-core\nspec:\n  description: Core engineering platform services");
         engineeringService.setDepartment("Engineering");
-        engineeringService.setItal("Bob Builder");
+        engineeringService.setManager("Bob Builder");
         engineeringService = repository.save(engineeringService);
 
         // 3. Create a Data Source
         OpenSlo prometheusSource = new OpenSlo("openslo/v1", "DataSource", "prometheus-prod", "Production Prometheus", 
             "apiVersion: openslo/v1\nkind: DataSource\nmetadata:\n  name: prometheus-prod\nspec:\n  type: prometheus\n  config:\n    url: http://prometheus:9090");
         prometheusSource.setDepartment("Infrastructure");
-        prometheusSource.setItal("John Smith");
+        prometheusSource.setManager("John Smith");
         prometheusSource.setRefreshRate(15); // Refresh every 15 minutes for testing
         prometheusSource = repository.save(prometheusSource);
 
@@ -130,7 +130,7 @@ public class DataInitializer {
         OpenSlo multiSourceSli = new OpenSlo("openslo/v1", "SLI", "multi-source-sli", "Multi-Source SLI", 
             "apiVersion: openslo/v1\nkind: SLI\nmetadata:\n  name: multi-source-sli\nspec:\n  metricSources:\n    - type: prometheus\n      spec:\n        query: sum(rate(http_requests_total{job=\"api\"}[5m]))\n    - type: datadog\n      spec:\n        query: avg:system.cpu.idle{host:api-server}");
         multiSourceSli.setDepartment("Infrastructure");
-        multiSourceSli.setItal("John Smith");
+        multiSourceSli.setManager("John Smith");
         multiSourceSli.setDatasource(prometheusSource);
         multiSourceSli = repository.save(multiSourceSli);
 
@@ -138,7 +138,7 @@ public class DataInitializer {
         OpenSlo slackAlert = new OpenSlo("openslo/v1", "AlertingSource", "slack-notifications", "Slack Notifications", 
             "apiVersion: openslo/v1\nkind: AlertingSource\nmetadata:\n  name: slack-notifications\nspec:\n  type: slack-webhook");
         slackAlert.setDepartment("Engineering");
-        slackAlert.setItal("Bob Builder");
+        slackAlert.setManager("Bob Builder");
         slackAlert.setAlertUrl("https://hooks.slack.com/services/T00000000/B00000000/XXXXXXXXXXXXXXXXXXXXXXXX");
         slackAlert.setAlertPayload("{\"text\": \"SLO *${SLO_NAME}* is *${SLO_STATUS}* with value *${SLO_VALUE}%*\"}");
         slackAlert = repository.save(slackAlert);
@@ -146,7 +146,7 @@ public class DataInitializer {
         OpenSlo emailAlert = new OpenSlo("openslo/v1", "AlertingSource", "email-alerts", "Email Alerts", 
             "apiVersion: openslo/v1\nkind: AlertingSource\nmetadata:\n  name: email-alerts\nspec:\n  type: email");
         emailAlert.setDepartment("Finance");
-        emailAlert.setItal("Jane Doe");
+        emailAlert.setManager("Jane Doe");
         emailAlert.setAlertUrl("mailto:ops-team@example.com");
         emailAlert.setAlertPayload("Subject: SLO Breach - ${SLO_NAME}\n\nStatus: ${SLO_STATUS}\nCurrent Value: ${SLO_VALUE}%");
         emailAlert = repository.save(emailAlert);
@@ -154,7 +154,7 @@ public class DataInitializer {
         OpenSlo pagerDutyAlert = new OpenSlo("openslo/v1", "AlertingSource", "pagerduty-alerts", "PagerDuty Alerts", 
             "apiVersion: openslo/v1\nkind: AlertingSource\nmetadata:\n  name: pagerduty-alerts\nspec:\n  type: pagerduty");
         pagerDutyAlert.setDepartment("Infrastructure");
-        pagerDutyAlert.setItal("John Smith");
+        pagerDutyAlert.setManager("John Smith");
         pagerDutyAlert.setAlertUrl("https://events.pagerduty.com/v2/enqueue");
         pagerDutyAlert.setAlertPayload("{\"event_action\": \"trigger\", \"payload\": {\"summary\": \"SLO ${SLO_NAME} is ${SLO_STATUS}\", \"severity\": \"critical\"}}");
         pagerDutyAlert = repository.save(pagerDutyAlert);
@@ -162,7 +162,7 @@ public class DataInitializer {
         OpenSlo discordAlert = new OpenSlo("openslo/v1", "AlertingSource", "discord-alerts", "Discord Alerts", 
             "apiVersion: openslo/v1\nkind: AlertingSource\nmetadata:\n  name: discord-alerts\nspec:\n  type: discord-webhook");
         discordAlert.setDepartment("Engineering");
-        discordAlert.setItal("Bob Builder");
+        discordAlert.setManager("Bob Builder");
         discordAlert.setAlertUrl("https://discord.com/api/webhooks/000000000000000000/XXXXXXXXXXXXXXXXXXXXXXXX");
         discordAlert.setAlertPayload("{\"content\": \"Alert: SLO **${SLO_NAME}** is **${SLO_STATUS}** with value **${SLO_VALUE}%**\"}");
         discordAlert = repository.save(discordAlert);
@@ -188,7 +188,7 @@ public class DataInitializer {
         OpenSlo sli = new OpenSlo("openslo/v1", "SLI", name, displayName, 
             "apiVersion: openslo/v1\nkind: SLI\nmetadata:\n  name: " + name + "\nspec:\n  metricSource:\n    type: prometheus\n    spec:\n      query: " + query);
         sli.setDepartment(department);
-        sli.setItal("John Smith");
+        sli.setManager("John Smith");
         sli.setDatasource(datasource);
         return repository.save(sli);
     }
@@ -200,7 +200,7 @@ public class DataInitializer {
         slo.setSlis(slis);
         slo.setAlertingSource(alertingSource);
         slo.setDepartment(service.getDepartment());
-        slo.setItal(service.getItal());
+        slo.setManager(service.getManager());
         repository.save(slo);
     }
 
