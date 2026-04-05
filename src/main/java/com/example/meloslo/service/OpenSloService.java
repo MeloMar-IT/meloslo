@@ -103,18 +103,14 @@ public class OpenSloService {
     @Transactional(readOnly = true)
     public List<OpenSlo> getAllRecords() {
         List<OpenSlo> records = filterByDepartment(repository.findAll());
-        for (OpenSlo record : records) {
-            populateTransientFields(record);
-        }
+        populateTransientFieldsForList(records);
         return records;
     }
 
     @Transactional(readOnly = true)
     public List<OpenSlo> getRecordsByKind(String kind) {
         List<OpenSlo> records = filterByDepartment(repository.findByKind(kind));
-        for (OpenSlo record : records) {
-            populateTransientFields(record);
-        }
+        populateTransientFieldsForList(records);
         return records;
     }
 
@@ -133,6 +129,64 @@ public class OpenSloService {
         }
         record.ifPresent(this::populateTransientFields);
         return record;
+    }
+
+    @Transactional(readOnly = true)
+    public void populateTransientFieldsForList(List<OpenSlo> records) {
+        List<OpenSlo> slos = records.stream()
+                .filter(r -> "SLO".equalsIgnoreCase(r.getKind()))
+                .collect(Collectors.toList());
+
+        if (!slos.isEmpty()) {
+            // Find all unique SLIs across all SLOs
+            List<OpenSlo> allSlis = slos.stream()
+                    .flatMap(slo -> slo.getSlis().stream())
+                    .distinct()
+                    .collect(Collectors.toList());
+
+            if (!allSlis.isEmpty()) {
+                // Determine the maximum window size required
+                int maxWindowDays = slos.stream()
+                        .mapToInt(slo -> parseWindowDaysFromSpec(slo.getSpec()))
+                        .max()
+                        .orElse(30);
+                LocalDateTime windowStart = LocalDateTime.now().minusDays(maxWindowDays);
+
+                // Batch fetch all relevant metrics for all SLIs
+                List<SliMetric> allMetrics = metricRepository.findBySliInAndTimestampAfterOrderByTimestampDesc(allSlis, windowStart);
+                Map<Long, List<SliMetric>> metricsBySliId = allMetrics.stream()
+                        .collect(Collectors.groupingBy(m -> m.getSli().getId()));
+
+                // Now populate each SLO using the pre-fetched metrics
+                for (OpenSlo slo : slos) {
+                    double target = parseTargetFromSpec(slo.getSpec());
+                    int windowDays = parseWindowDaysFromSpec(slo.getSpec());
+                    LocalDateTime sloWindowStart = LocalDateTime.now().minusDays(windowDays);
+
+                    List<SliMetric> sloMetrics = slo.getSlis().stream()
+                            .flatMap(sli -> metricsBySliId.getOrDefault(sli.getId(), new ArrayList<>()).stream())
+                            .filter(m -> m.getTimestamp().isAfter(sloWindowStart))
+                            .collect(Collectors.toList());
+
+                    double currentSloValue = sloMetrics.stream()
+                            .mapToDouble(SliMetric::getValue)
+                            .average()
+                            .orElse(1.0);
+
+                    double errorBudget = (1.0 - target > 0) ? (currentSloValue - target) / (1.0 - target) * 100 : 100.0;
+                    slo.setErrorBudget(errorBudget);
+                    slo.setStatus(determineStatus(errorBudget));
+                    slo.setCurrentValue(currentSloValue);
+                }
+            }
+        }
+
+        // Handle BusinessService if needed - though they might depend on populated SLOs
+        for (OpenSlo record : records) {
+            if ("BusinessService".equalsIgnoreCase(record.getKind())) {
+                populateTransientFields(record);
+            }
+        }
     }
 
     public void populateTransientFields(OpenSlo record) {
