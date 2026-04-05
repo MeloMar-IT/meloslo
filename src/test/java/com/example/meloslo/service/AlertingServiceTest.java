@@ -20,13 +20,15 @@ class AlertingServiceTest {
 
     private OpenSloRepository openSloRepository;
     private RestTemplate restTemplate;
+    private TaskManagementService taskManagementService;
     private AlertingService alertingService;
 
     @BeforeEach
     void setUp() {
         openSloRepository = mock(OpenSloRepository.class);
         restTemplate = mock(RestTemplate.class);
-        alertingService = new AlertingService(openSloRepository, restTemplate);
+        taskManagementService = mock(TaskManagementService.class);
+        alertingService = new AlertingService(openSloRepository, restTemplate, taskManagementService);
     }
 
     @Test
@@ -46,6 +48,11 @@ class AlertingServiceTest {
         slo.setAlertingSource(source);
 
         alertingService.sendAlertIfNeeded(slo);
+
+        ArgumentCaptor<Runnable> runnableCaptor = ArgumentCaptor.forClass(Runnable.class);
+        verify(taskManagementService).runAsyncTask(eq("Alert-1"), runnableCaptor.capture());
+        
+        runnableCaptor.getValue().run();
 
         ArgumentCaptor<HttpEntity> entityCaptor = ArgumentCaptor.forClass(HttpEntity.class);
         verify(restTemplate).postForEntity(eq("http://mock-webhook"), entityCaptor.capture(), eq(String.class));
@@ -86,6 +93,7 @@ class AlertingServiceTest {
         source.setAlertPayload("${SLO_NAME}");
 
         OpenSlo slo = new OpenSlo();
+        slo.setId(2L);
         slo.setKind("SLO");
         slo.setName("old-alert-slo");
         slo.setStatus("Breaching");
@@ -94,6 +102,10 @@ class AlertingServiceTest {
         slo.setLastAlertTime(LocalDateTime.now().minusHours(7));
 
         alertingService.sendAlertIfNeeded(slo);
+
+        ArgumentCaptor<Runnable> runnableCaptor = ArgumentCaptor.forClass(Runnable.class);
+        verify(taskManagementService).runAsyncTask(eq("Alert-2"), runnableCaptor.capture());
+        runnableCaptor.getValue().run();
 
         verify(restTemplate).postForEntity(eq("http://mock-webhook"), any(), eq(String.class));
     }

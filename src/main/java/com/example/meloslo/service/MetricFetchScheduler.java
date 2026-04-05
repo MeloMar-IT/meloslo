@@ -23,20 +23,22 @@ public class MetricFetchScheduler {
     private final MetricRepository metricRepository;
     private final OpenSloService openSloService;
     private final AlertingService alertingService;
+    private final TaskManagementService taskManagementService;
 
     @Autowired
     public MetricFetchScheduler(OpenSloRepository openSloRepository, 
                                 MetricRepository metricRepository,
                                 OpenSloService openSloService,
-                                AlertingService alertingService) {
+                                AlertingService alertingService,
+                                TaskManagementService taskManagementService) {
         this.openSloRepository = openSloRepository;
         this.metricRepository = metricRepository;
         this.openSloService = openSloService;
         this.alertingService = alertingService;
+        this.taskManagementService = taskManagementService;
     }
 
     @Scheduled(fixedRate = 900000) // Run every 15 minutes to check for updates and breaches
-    @Transactional
     public void fetchMetrics() {
         List<OpenSlo> dataSources = openSloRepository.findByKind("DataSource");
         LocalDateTime now = LocalDateTime.now();
@@ -61,35 +63,39 @@ public class MetricFetchScheduler {
             LocalDateTime lastRefresh = ds.getLastRefreshTime();
             // Fetch if never refreshed or if refreshRate minutes passed since last refresh
             if (lastRefresh == null || lastRefresh.plusMinutes(refreshRate).isBefore(now)) {
-                log.info("Fetching metrics for DataSource: {} (Refresh Rate: {}m)", ds.getName(), refreshRate);
-                
-                List<OpenSlo> slis = ds.getIndicatorSlis();
-                if (slis.isEmpty()) {
-                    log.debug("No SLIs linked to DataSource: {}", ds.getName());
-                }
-
-                for (OpenSlo sli : slis) {
-                    try {
-                        double value = simulateFetch(ds, sli);
-                        metricRepository.save(new SliMetric(now, value, sli, ds));
-                        log.debug("Fetched metric for SLI {}: {}", sli.getName(), value);
-
-                        // Check SLOs linked to this SLI (redundant now, but can stay for immediate alert after metric fetch)
-                        List<OpenSlo> slos = openSloRepository.findByKind("SLO");
-                        for (OpenSlo slo : slos) {
-                            if (slo.getSlis().stream().anyMatch(s -> s.getId().equals(sli.getId()))) {
-                                openSloService.populateTransientFields(slo);
-                                alertingService.sendAlertIfNeeded(slo);
-                            }
-                        }
-                    } catch (Exception e) {
-                        log.error("Failed to fetch metric for SLI {}: {}. Setting value to 0.", sli.getName(), e.getMessage());
-                        metricRepository.save(new SliMetric(now, 0.0, sli, ds));
+                String taskId = "Fetch-" + ds.getId();
+                final Integer finalRefreshRate = refreshRate;
+                taskManagementService.runAsyncTask(taskId, () -> {
+                    log.info("Fetching metrics for DataSource: {} (Refresh Rate: {}m)", ds.getName(), finalRefreshRate);
+                    
+                    List<OpenSlo> slis = ds.getIndicatorSlis();
+                    if (slis.isEmpty()) {
+                        log.debug("No SLIs linked to DataSource: {}", ds.getName());
                     }
-                }
-                
-                ds.setLastRefreshTime(now);
-                openSloRepository.save(ds);
+
+                    for (OpenSlo sli : slis) {
+                        try {
+                            double value = simulateFetch(ds, sli);
+                            metricRepository.save(new SliMetric(LocalDateTime.now(), value, sli, ds));
+                            log.debug("Fetched metric for SLI {}: {}", sli.getName(), value);
+
+                            // Check SLOs linked to this SLI (redundant now, but can stay for immediate alert after metric fetch)
+                            List<OpenSlo> slos = openSloRepository.findByKind("SLO");
+                            for (OpenSlo slo : slos) {
+                                if (slo.getSlis().stream().anyMatch(s -> s.getId().equals(sli.getId()))) {
+                                    openSloService.populateTransientFields(slo);
+                                    alertingService.sendAlertIfNeeded(slo);
+                                }
+                            }
+                        } catch (Exception e) {
+                            log.error("Failed to fetch metric for SLI {}: {}. Setting value to 0.", sli.getName(), e.getMessage());
+                            metricRepository.save(new SliMetric(LocalDateTime.now(), 0.0, sli, ds));
+                        }
+                    }
+                    
+                    ds.setLastRefreshTime(LocalDateTime.now());
+                    openSloRepository.save(ds);
+                });
             }
         }
     }
