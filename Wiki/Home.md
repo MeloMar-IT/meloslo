@@ -210,6 +210,10 @@ The engine decomposes data into:
 2. **Weekly Seasonality**: Adjustments for day-of-week patterns (e.g., weekend traffic spikes).
 3. **Residuals**: Refinements based on recent variance.
 
+### Training Data
+
+The trend model is trained on **all available metrics up to 1 year**. This ensures that the prediction accounts for both long-term shifts and recent variations.
+
 ### Forecast Horizon
 
 MeloSlo provides a **30-day forecast**. If the projected line crosses the 0% threshold, it indicates a likely SLO breach within the next month.

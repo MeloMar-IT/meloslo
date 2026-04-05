@@ -320,7 +320,7 @@ public class OpenSloService {
 
         List<SliMetric> recentMetrics = allMetrics.size() > 50 ? allMetrics.subList(0, 50) : allMetrics;
 
-        // Calculate 30-day trend
+        // Calculate trend using all available data up to 1 year
         List<Double> trendPoints = calculateTrendPoints(allMetrics, target, 30);
 
         // Calculate 30-day historical SLO values
@@ -357,13 +357,13 @@ public class OpenSloService {
     public List<Double> calculateTrendPoints(List<SliMetric> metrics, double target, int futureDays) {
         if (metrics.isEmpty()) return new ArrayList<>();
 
-        // 1. Group by day and calculate daily average for the last 30 days
+        // 1. Group by day and calculate daily average for up to 1 year
         LocalDateTime now = LocalDateTime.now();
-        LocalDateTime past30Days = now.minusDays(30);
+        LocalDateTime pastOneYear = now.minusYears(1);
 
         // Group by LocalDate and calculate average SLI per day
         Map<java.time.LocalDate, Double> dailySli = metrics.stream()
-                .filter(m -> m.getTimestamp() != null && m.getTimestamp().isAfter(past30Days))
+                .filter(m -> m.getTimestamp() != null && m.getTimestamp().isAfter(pastOneYear))
                 .collect(java.util.stream.Collectors.groupingBy(
                         m -> m.getTimestamp().toLocalDate(),
                         java.util.TreeMap::new,
