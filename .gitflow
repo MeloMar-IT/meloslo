@@ -1,0 +1,19 @@
+# Git Flow Configuration
+
+[default]
+branch = main
+
+[branches]
+feature = feature/{username}/{issue}
+bugfix = bugfix/{username}/{issue}
+hotfix = hotfix/{username}/{issue}
+release = release/{version}
+
+[settings]
+
+# Git Flow behavior settings
+
+# Allow checking out an existing issue
+allow_checking_out_existing_issue = true
+# Auto branching
+auto_branch = true
