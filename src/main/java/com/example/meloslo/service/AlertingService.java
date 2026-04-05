@@ -44,8 +44,14 @@ public class AlertingService {
         }
 
         String taskId = "Alert-" + slo.getId();
+        Long sloId = slo.getId();
         taskManagementService.runAsyncTask(taskId, () -> {
-            OpenSlo source = slo.getAlertingSource();
+            OpenSlo currentSlo = openSloRepository.findById(sloId).orElse(null);
+            if (currentSlo == null || !"SLO".equalsIgnoreCase(currentSlo.getKind()) || currentSlo.getAlertingSource() == null) {
+                return;
+            }
+
+            OpenSlo source = currentSlo.getAlertingSource();
             String url = source.getAlertUrl();
             String payloadTemplate = source.getAlertPayload();
 
@@ -54,20 +60,20 @@ public class AlertingService {
                 return;
             }
 
-            String payload = replaceVariables(payloadTemplate, slo);
+            String payload = replaceVariables(payloadTemplate, currentSlo);
 
             try {
-                log.info("Sending alert for SLO {} to {}", slo.getName(), url);
+                log.info("Sending alert for SLO {} to {}", currentSlo.getName(), url);
                 HttpHeaders headers = new HttpHeaders();
                 headers.setContentType(MediaType.APPLICATION_JSON);
                 HttpEntity<String> entity = new HttpEntity<>(payload, headers);
 
                 restTemplate.postForEntity(url, entity, String.class);
 
-                slo.setLastAlertTime(LocalDateTime.now());
-                openSloRepository.save(slo);
+                currentSlo.setLastAlertTime(LocalDateTime.now());
+                openSloRepository.save(currentSlo);
             } catch (Exception e) {
-                log.error("Failed to send alert for SLO {}: {}", slo.getName(), e.getMessage());
+                log.error("Failed to send alert for SLO {}: {}", currentSlo.getName(), e.getMessage());
             }
         });
     }
