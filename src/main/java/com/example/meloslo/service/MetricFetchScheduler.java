@@ -47,11 +47,11 @@ public class MetricFetchScheduler {
     }
 
     @Scheduled(fixedRate = 900000) // Run every 15 minutes to check for updates and breaches
+    @Transactional
     public void fetchMetrics() {
         List<OpenSlo> dataSources = openSloRepository.findByKind("DataSource");
         LocalDateTime now = LocalDateTime.now();
 
-        // Always check SLOs for breaches every 15 minutes
         log.info("Checking for SLO breaches...");
         List<OpenSlo> allSlos = openSloRepository.findByKind("SLO");
         for (OpenSlo slo : allSlos) {
@@ -91,15 +91,6 @@ public class MetricFetchScheduler {
                             }
                             metricRepository.save(new SliMetric(LocalDateTime.now(), value, sli, ds));
                             log.debug("Fetched metric for SLI {}: {}", sli.getName(), value);
-
-                            // Check SLOs linked to this SLI (redundant now, but can stay for immediate alert after metric fetch)
-                            List<OpenSlo> slos = openSloRepository.findByKind("SLO");
-                            for (OpenSlo slo : slos) {
-                                if (slo.getSlis().stream().anyMatch(s -> s.getId().equals(sli.getId()))) {
-                                    openSloService.populateTransientFields(slo);
-                                    alertingService.sendAlertIfNeeded(slo);
-                                }
-                            }
                         } catch (Exception e) {
                             log.error("Failed to fetch metric for SLI {}: {}. Setting value to 0.", sli.getName(), e.getMessage());
                             metricRepository.save(new SliMetric(LocalDateTime.now(), 0.0, sli, ds));

@@ -51,9 +51,9 @@ class MetricControllerUnitTest {
     }
 
     @Test
-    void shouldRedirectToLoginWhenUnauthenticated() throws Exception {
+    void shouldReturnUnauthorizedWhenUnauthenticated() throws Exception {
         mockMvc.perform(get("/api/v1/metrics"))
-                .andExpect(status().is3xxRedirection());
+                .andExpect(status().isUnauthorized());
     }
 
     @Test

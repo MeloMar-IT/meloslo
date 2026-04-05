@@ -31,6 +31,7 @@ import java.util.stream.Collectors;
 
 @Service
 public class OpenSloService {
+    private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(OpenSloService.class);
 
     private final OpenSloRepository repository;
     private final MetricRepository metricRepository;
@@ -85,11 +86,21 @@ public class OpenSloService {
         if (userDepts.isEmpty()) {
             return records;
         }
+
+        // Initialize collections within the transaction to avoid LazyInitializationException
+        for (OpenSlo record : records) {
+            if (record.getSlis() != null) record.getSlis().size();
+            if (record.getSlos() != null) record.getSlos().size();
+            if (record.getIndicatorSlis() != null) record.getIndicatorSlis().size();
+            if (record.getLinkedSlos() != null) record.getLinkedSlos().size();
+        }
+
         return records.stream()
                 .filter(r -> r.getDepartment() == null || r.getDepartment().isEmpty() || userDepts.stream().anyMatch(dept -> dept.equalsIgnoreCase(r.getDepartment())))
                 .collect(java.util.stream.Collectors.toList());
     }
 
+    @Transactional(readOnly = true)
     public List<OpenSlo> getAllRecords() {
         List<OpenSlo> records = filterByDepartment(repository.findAll());
         for (OpenSlo record : records) {
@@ -98,6 +109,7 @@ public class OpenSloService {
         return records;
     }
 
+    @Transactional(readOnly = true)
     public List<OpenSlo> getRecordsByKind(String kind) {
         List<OpenSlo> records = filterByDepartment(repository.findByKind(kind));
         for (OpenSlo record : records) {
@@ -106,6 +118,7 @@ public class OpenSloService {
         return records;
     }
 
+    @Transactional(readOnly = true)
     public Optional<OpenSlo> getRecordById(Long id) {
         Optional<OpenSlo> record = repository.findById(id);
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
@@ -160,10 +173,12 @@ public class OpenSloService {
         return record;
     }
 
+    @Transactional
     public OpenSlo createRecord(OpenSlo record) {
         return repository.save(record);
     }
 
+    @Transactional
     public OpenSlo updateRecord(Long id, OpenSlo updatedRecord) {
         return repository.findById(id)
                 .map(record -> {
@@ -220,6 +235,7 @@ public class OpenSloService {
         return metricRepository.findBySliOrderByTimestampDesc(sli);
     }
 
+    @Transactional(readOnly = true)
     public SliReport getSliReport(Long id) {
         OpenSlo sli = repository.findById(id)
                 .orElseThrow(() -> new RuntimeException("OpenSLO record not found with id " + id));
@@ -253,6 +269,7 @@ public class OpenSloService {
         return new SliReport(sli.getName(), sli.getDisplayName(), currentValue, avgTarget, recentMetrics);
     }
 
+    @Transactional(readOnly = true)
     public SloReport getSloReport(Long id) {
         OpenSlo slo = repository.findById(id)
                 .orElseThrow(() -> new RuntimeException("OpenSLO record not found with id " + id));
@@ -264,6 +281,7 @@ public class OpenSloService {
         return calculateSloReport(slo);
     }
 
+    @Transactional(readOnly = true)
     public DashboardStats getDashboardStats() {
         List<OpenSlo> services = repository.findByKind("BusinessService");
         List<OpenSlo> slos = repository.findByKind("SLO");
@@ -300,7 +318,8 @@ public class OpenSloService {
         }
     }
 
-    private SloReport calculateSloReport(OpenSlo slo) {
+    @Transactional(readOnly = true)
+    public SloReport calculateSloReport(OpenSlo slo) {
         double target = parseTargetFromSpec(slo.getSpec());
         int windowDays = parseWindowDaysFromSpec(slo.getSpec());
         LocalDateTime windowStart = LocalDateTime.now().minusDays(windowDays);
@@ -423,6 +442,7 @@ public class OpenSloService {
         return projection;
     }
 
+    @Transactional(readOnly = true)
     public BusinessServiceReport getServiceReport(Long id) {
         OpenSlo service = repository.findById(id)
                 .orElseThrow(() -> new RuntimeException("OpenSLO record not found with id " + id));
