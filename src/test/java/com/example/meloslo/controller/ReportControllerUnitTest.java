@@ -1,5 +1,6 @@
 package com.example.meloslo.controller;
 
+import com.example.meloslo.dto.ReportOptionsDTO;
 import com.example.meloslo.service.ReportService;
 import com.example.meloslo.repository.UserRepository;
 import com.example.meloslo.config.SecurityConfig;
@@ -14,7 +15,7 @@ import org.springframework.test.web.servlet.MockMvc;
 
 import java.util.List;
 
-import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
@@ -36,11 +37,11 @@ class ReportControllerUnitTest {
     @WithMockUser
     void shouldDownloadPdfReport() throws Exception {
         byte[] pdfContent = "%PDF-1.4 test content".getBytes();
-        when(reportService.generatePdfReport(anyList())).thenReturn(pdfContent);
+        when(reportService.generatePdfReport(any(ReportOptionsDTO.class))).thenReturn(pdfContent);
 
         mockMvc.perform(post("/api/v1/reports/pdf")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("[1, 2, 3]"))
+                        .content("{\"ids\": [1, 2, 3], \"includeMetadata\": true}"))
                 .andExpect(status().isOk())
                 .andExpect(content().contentType(MediaType.APPLICATION_PDF))
                 .andExpect(header().string("Content-Disposition", org.hamcrest.Matchers.containsString("attachment")))
@@ -51,7 +52,7 @@ class ReportControllerUnitTest {
     void shouldReturn3xxWhenUnauthenticated() throws Exception {
         mockMvc.perform(post("/api/v1/reports/pdf")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("[1, 2, 3]"))
+                        .content("{\"ids\": [1, 2, 3]}"))
                 .andExpect(status().is3xxRedirection());
     }
 }

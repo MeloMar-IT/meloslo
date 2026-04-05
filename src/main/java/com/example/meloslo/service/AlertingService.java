@@ -20,11 +20,13 @@ public class AlertingService {
     private static final Logger log = LoggerFactory.getLogger(AlertingService.class);
     private final RestTemplate restTemplate;
     private final OpenSloRepository openSloRepository;
+    private final TaskManagementService taskManagementService;
 
     @Autowired
-    public AlertingService(OpenSloRepository openSloRepository, RestTemplate restTemplate) {
+    public AlertingService(OpenSloRepository openSloRepository, RestTemplate restTemplate, TaskManagementService taskManagementService) {
         this.openSloRepository = openSloRepository;
         this.restTemplate = restTemplate;
+        this.taskManagementService = taskManagementService;
     }
 
     public void sendAlertIfNeeded(OpenSlo slo) {
@@ -41,30 +43,33 @@ public class AlertingService {
             return;
         }
 
-        OpenSlo source = slo.getAlertingSource();
-        String url = source.getAlertUrl();
-        String payloadTemplate = source.getAlertPayload();
+        String taskId = "Alert-" + slo.getId();
+        taskManagementService.runAsyncTask(taskId, () -> {
+            OpenSlo source = slo.getAlertingSource();
+            String url = source.getAlertUrl();
+            String payloadTemplate = source.getAlertPayload();
 
-        if (url == null || url.isBlank()) {
-            log.warn("AlertingSource {} has no URL configured", source.getName());
-            return;
-        }
+            if (url == null || url.isBlank()) {
+                log.warn("AlertingSource {} has no URL configured", source.getName());
+                return;
+            }
 
-        String payload = replaceVariables(payloadTemplate, slo);
+            String payload = replaceVariables(payloadTemplate, slo);
 
-        try {
-            log.info("Sending alert for SLO {} to {}", slo.getName(), url);
-            HttpHeaders headers = new HttpHeaders();
-            headers.setContentType(MediaType.APPLICATION_JSON);
-            HttpEntity<String> entity = new HttpEntity<>(payload, headers);
+            try {
+                log.info("Sending alert for SLO {} to {}", slo.getName(), url);
+                HttpHeaders headers = new HttpHeaders();
+                headers.setContentType(MediaType.APPLICATION_JSON);
+                HttpEntity<String> entity = new HttpEntity<>(payload, headers);
 
-            restTemplate.postForEntity(url, entity, String.class);
+                restTemplate.postForEntity(url, entity, String.class);
 
-            slo.setLastAlertTime(LocalDateTime.now());
-            openSloRepository.save(slo);
-        } catch (Exception e) {
-            log.error("Failed to send alert for SLO {}: {}", slo.getName(), e.getMessage());
-        }
+                slo.setLastAlertTime(LocalDateTime.now());
+                openSloRepository.save(slo);
+            } catch (Exception e) {
+                log.error("Failed to send alert for SLO {}: {}", slo.getName(), e.getMessage());
+            }
+        });
     }
 
     private String replaceVariables(String template, OpenSlo slo) {

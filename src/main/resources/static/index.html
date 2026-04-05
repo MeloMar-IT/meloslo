@@ -674,6 +674,10 @@
                                     <h3 class="font-bold text-slate-800 mb-4">Error Budget Burndown</h3>
                                     <div id="chart"></div>
                                 </div>
+                                <div class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+                                    <h3 class="font-bold text-slate-800 mb-4">SLO Value (Last 30 Days)</h3>
+                                    <div id="slo-value-chart"></div>
+                                </div>
                                 <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
                                     <div class="p-6 border-b border-slate-200">
                                         <h3 class="font-bold text-slate-800">Specification</h3>
@@ -775,7 +779,7 @@
                                     <h1 class="text-3xl font-bold text-slate-900">Annual Reports</h1>
                                     <p class="text-slate-500 mt-1">Generate a 1-year performance report for your Services and SLOs</p>
                                 </div>
-                                <button @click="generateReport" :disabled="isGeneratingReport || selectedReportRecords.length === 0"
+                                <button @click="openReportOptionsModal" :disabled="isGeneratingReport || selectedReportRecords.length === 0"
                                         class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2.5 rounded-lg font-semibold flex items-center shadow-lg shadow-blue-200 transition-all disabled:opacity-50">
                                     <i v-if="isGeneratingReport" class="fas fa-spinner fa-spin mr-2"></i>
                                     <i v-else class="fas fa-file-pdf mr-2"></i>
@@ -858,6 +862,7 @@
                                         <li><strong>Data Source:</strong> A record defining where metrics come from (e.g. Prometheus). Supports custom <strong>Refresh Rates</strong> (min 15m).</li>
                                         <li><strong>Error Budget:</strong> The amount of unreliability you can afford before violating your SLO.</li>
                                         <li><strong>Alerting Source:</strong> A record defining a webhook (e.g. Slack) to notify when an SLO is breached. Includes variables like <code>${SLO_NAME}</code> and 6h anti-spam.</li>
+                                        <li><strong>Background Processing:</strong> All heavy tasks (fetching metrics, sending alerts) run in background threads with a 5-minute timeout watchdog for stability.</li>
                                         <li><strong>Status Thresholds:</strong> SLOs are <strong>Healthy</strong> (Budget &ge; 25%), <strong>Warning</strong> (0% to 25%), or <strong>Breaching</strong> (&lt; 0%).</li>
                                     </ul>
                                 </div>
@@ -929,12 +934,20 @@
                                         <p class="text-sm text-slate-600">Go to the 'Reports' view to generate professional annual PDF performance reports for your Services and SLOs. Gaps in data are automatically handled.</p>
                                     </div>
                                     <div>
-                                        <h4 class="font-bold text-slate-800 mb-1">6. Configure Alerting</h4>
+                                        <h4 class="font-bold text-slate-800 mb-1">6. Trend Prediction</h4>
+                                        <p class="text-sm text-slate-600">MeloSlo includes an advanced trend prediction engine that uses additive modeling (linear trend + seasonality) to forecast future error budget consumption based on historical data. Look for the 'Trend Analysis' section in SLO details.</p>
+                                    </div>
+                                    <div>
+                                        <h4 class="font-bold text-slate-800 mb-1">7. Configure Alerting</h4>
                                         <p class="text-sm text-slate-600">Create an 'Alerting Source' with your webhook URL and JSON payload. Then link it to your SLOs to get notified when they are breaching. Use <code>${SLO_NAME}</code>, <code>${SLO_STATUS}</code>, and <code>${SLO_VALUE}</code> variables.</p>
                                     </div>
                                     <div>
-                                        <h4 class="font-bold text-slate-800 mb-1">7. Database Maintenance</h4>
+                                        <h4 class="font-bold text-slate-800 mb-1">8. Database Maintenance</h4>
                                         <p class="text-sm text-slate-600">Administrators can use the 'Query Tool' to run <code>SELECT</code> queries against the internal database to audit records or inspect table structures.</p>
+                                    </div>
+                                    <div>
+                                        <h4 class="font-bold text-slate-800 mb-1">9. Thread Stability</h4>
+                                        <p class="text-sm text-slate-600">MeloSlo uses a background thread pool for all non-blocking operations. A built-in watchdog ensures that no single task (like a slow metric fetch) consumes resources for more than 5 minutes.</p>
                                     </div>
                                 </div>
                             </section>
@@ -1685,6 +1698,105 @@ spec:
             </div>
         </div>
 
+        <!-- Report Options Modal -->
+        <div v-if="isReportOptionsModalOpen" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden animate__animated animate__zoomIn animate__faster">
+                <div class="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+                    <h3 class="text-xl font-bold text-slate-800">Report Options</h3>
+                    <button @click="isReportOptionsModalOpen = false" class="text-slate-400 hover:text-slate-600 transition-colors">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+                <div class="p-6 space-y-4 max-h-[60vh] overflow-y-auto">
+                    <p class="text-sm text-slate-500 mb-2">Customize your PDF report by selecting the components and time period.</p>
+                    
+                    <div class="space-y-4">
+                        <!-- Time Period Selection -->
+                        <div class="p-4 bg-slate-50 rounded-xl border border-slate-100 space-y-3">
+                            <h4 class="text-sm font-bold text-slate-700 flex items-center">
+                                <i class="fas fa-calendar-alt mr-2 text-blue-500"></i>
+                                Reporting Period
+                            </h4>
+                            <div class="flex items-center space-x-2">
+                                <input type="number" v-model="reportOptions.timeValue" min="1" class="w-20 rounded-lg border-slate-300 text-sm focus:ring-blue-500 focus:border-blue-500">
+                                <select v-model="reportOptions.timeUnit" class="flex-1 rounded-lg border-slate-300 text-sm focus:ring-blue-500 focus:border-blue-500">
+                                    <option value="DAYS">Days</option>
+                                    <option value="MONTHS">Months</option>
+                                    <option value="YEARS">Years</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <!-- Main Toggles -->
+                        <div class="space-y-2">
+                            <h4 class="text-xs font-bold text-slate-400 uppercase tracking-wider px-1">Components</h4>
+                            
+                            <label class="flex items-center space-x-3 p-3 rounded-lg border border-slate-100 hover:bg-slate-50 cursor-pointer transition-colors">
+                                <input type="checkbox" v-model="reportOptions.includeMetadata" class="rounded border-slate-300 text-blue-600 focus:ring-blue-500">
+                                <span class="text-sm font-medium text-slate-700">Include Metadata (System ID, Dept, Manager)</span>
+                            </label>
+
+                            <label class="flex items-center space-x-3 p-3 rounded-lg border border-slate-100 hover:bg-slate-50 cursor-pointer transition-colors">
+                                <input type="checkbox" v-model="reportOptions.includeBusinessServiceAggregatedChart" class="rounded border-slate-300 text-blue-600 focus:ring-blue-500">
+                                <span class="text-sm font-medium text-slate-700">Include Service Aggregated Charts</span>
+                            </label>
+
+                            <div class="rounded-lg border border-slate-100 overflow-hidden">
+                                <label class="flex items-center space-x-3 p-3 bg-white hover:bg-slate-50 cursor-pointer transition-colors">
+                                    <input type="checkbox" v-model="reportOptions.includeSloDetails" class="rounded border-slate-300 text-blue-600 focus:ring-blue-500">
+                                    <span class="text-sm font-medium text-slate-700">Include SLO Details Section</span>
+                                </label>
+                                
+                                <div v-if="reportOptions.includeSloDetails" class="bg-slate-50 p-3 pt-0 pl-10 space-y-2 animate__animated animate__fadeIn">
+                                    <label class="flex items-center space-x-2 cursor-pointer">
+                                        <input type="checkbox" v-model="reportOptions.includeTarget" class="rounded border-slate-300 text-blue-600 focus:ring-blue-500 text-xs">
+                                        <span class="text-xs text-slate-600">SLO Target</span>
+                                    </label>
+                                    <label class="flex items-center space-x-2 cursor-pointer">
+                                        <input type="checkbox" v-model="reportOptions.includeAvgPerformance" class="rounded border-slate-300 text-blue-600 focus:ring-blue-500 text-xs">
+                                        <span class="text-xs text-slate-600">Average Performance</span>
+                                    </label>
+                                    <label class="flex items-center space-x-2 cursor-pointer">
+                                        <input type="checkbox" v-model="reportOptions.includeErrorBudget" class="rounded border-slate-300 text-blue-600 focus:ring-blue-500 text-xs">
+                                        <span class="text-xs text-slate-600">Error Budget Remaining</span>
+                                    </label>
+                                    <label class="flex items-center space-x-2 cursor-pointer">
+                                        <input type="checkbox" v-model="reportOptions.includeStatus" class="rounded border-slate-300 text-blue-600 focus:ring-blue-500 text-xs">
+                                        <span class="text-xs text-slate-600">Health Status</span>
+                                    </label>
+                                </div>
+                            </div>
+
+                            <div class="rounded-lg border border-slate-100 overflow-hidden">
+                                <label class="flex items-center space-x-3 p-3 bg-white hover:bg-slate-50 cursor-pointer transition-colors">
+                                    <input type="checkbox" v-model="reportOptions.includeSloCharts" class="rounded border-slate-300 text-blue-600 focus:ring-blue-500">
+                                    <span class="text-sm font-medium text-slate-700">Include SLO Performance Charts</span>
+                                </label>
+                                
+                                <div v-if="reportOptions.includeSloCharts" class="bg-slate-50 p-3 pt-0 pl-10 space-y-2 animate__animated animate__fadeIn">
+                                    <label class="flex items-center space-x-2 cursor-pointer">
+                                        <input type="checkbox" v-model="reportOptions.includeMetricsChart" class="rounded border-slate-300 text-blue-600 focus:ring-blue-500 text-xs">
+                                        <span class="text-xs text-slate-600">SLO Performance (Metrics) Chart</span>
+                                    </label>
+                                    <label class="flex items-center space-x-2 cursor-pointer">
+                                        <input type="checkbox" v-model="reportOptions.includeErrorBudgetChart" class="rounded border-slate-300 text-blue-600 focus:ring-blue-500 text-xs">
+                                        <span class="text-xs text-slate-600">Error Budget Remaining (%) Chart</span>
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="p-6 border-t border-slate-100 bg-slate-50 flex justify-end space-x-3">
+                    <button @click="isReportOptionsModalOpen = false" class="px-4 py-2 text-slate-600 font-medium hover:text-slate-800 transition-colors">Cancel</button>
+                    <button @click="generateReport" class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg font-bold shadow-lg shadow-blue-200 transition-all flex items-center">
+                        <i class="fas fa-file-pdf mr-2"></i>
+                        Generate
+                    </button>
+                </div>
+            </div>
+        </div>
+
         <!-- Notification Toast -->
         <div v-if="notification" class="fixed bottom-6 right-6 px-6 py-3 rounded-xl shadow-2xl flex items-center space-x-3 animate__animated animate__fadeInRight" 
              :class="notification.type === 'success' ? 'bg-green-600 text-white' : 'bg-red-600 text-white'">
@@ -1736,6 +1848,21 @@ spec:
 
                 const selectedReportRecords = ref([]);
                 const isGeneratingReport = ref(false);
+                const isReportOptionsModalOpen = ref(false);
+                const reportOptions = ref({
+                    includeBusinessServiceAggregatedChart: true,
+                    includeSloDetails: true,
+                    includeSloCharts: true,
+                    includeMetadata: true,
+                    timeValue: 1,
+                    timeUnit: 'YEARS',
+                    includeTarget: true,
+                    includeAvgPerformance: true,
+                    includeErrorBudget: true,
+                    includeStatus: true,
+                    includeErrorBudgetChart: true,
+                    includeMetricsChart: true
+                });
                 const selectedTableName = ref('');
                 
                 const apiEndpoints = [
@@ -2250,12 +2377,16 @@ spec:
                     }
                 };
 
-                const generateReport = async () => {
+                const openReportOptionsModal = () => {
                     if (selectedReportRecords.value.length === 0) {
                         showNotification('warning', 'Please select at least one record to generate a report.');
                         return;
                     }
+                    isReportOptionsModalOpen.value = true;
+                };
 
+                const generateReport = async () => {
+                    isReportOptionsModalOpen.value = false;
                     isGeneratingReport.value = true;
                     try {
                         const response = await fetch('/api/v1/reports/pdf', {
@@ -2263,7 +2394,10 @@ spec:
                             headers: {
                                 'Content-Type': 'application/json'
                             },
-                            body: JSON.stringify(selectedReportRecords.value),
+                            body: JSON.stringify({
+                                ids: selectedReportRecords.value,
+                                ...reportOptions.value
+                            }),
                             credentials: 'same-origin'
                         });
 
@@ -2403,12 +2537,14 @@ spec:
                             selectedSloReport.value = report;
                             nextTick(() => {
                                 renderChart(report, '#chart');
+                                renderChart(report, '#slo-value-chart');
                                 if (window.Prism) window.Prism.highlightAll();
                             });
                         })
                         .catch(() => {
                             nextTick(() => {
                                 renderChart(null, '#chart');
+                                renderChart(null, '#slo-value-chart');
                                 if (window.Prism) window.Prism.highlightAll();
                             });
                         });
@@ -2476,18 +2612,82 @@ spec:
                     if (!chartContainer) return;
                     chartContainer.innerHTML = '';
 
-                    let seriesData = [100, 98, 97, 95, 94, 93, 91, 88, 85, 82, 80, 78, 75, 74];
-                    let categories = Array.from({length: 14}, (_, i) => `Day ${i+1}`);
-                    let seriesName = 'Remaining Budget';
+                    let series = [];
+                    let categories = [];
                     let targetValue = null;
 
-                    if (report && report.recentMetrics && report.recentMetrics.length > 0) {
-                        seriesData = report.recentMetrics.map(m => (m.value * 100).toFixed(2)).reverse();
-                        categories = report.recentMetrics.map(m => new Date(m.timestamp).toLocaleDateString()).reverse();
-                        seriesName = 'SLI Value (%)';
-                        if (report.target !== undefined && report.target !== null) {
-                            targetValue = report.target * 100;
+                    if (report && ((report.recentMetrics && report.recentMetrics.length > 0) || (report.historicalSloValues && report.historicalSloValues.length > 0))) {
+                        const timestamps = report.recentMetrics ? report.recentMetrics.map(m => new Date(m.timestamp).toLocaleDateString()).reverse() : [];
+                        
+                        // Handle SLO value chart
+                        if (selector === '#slo-value-chart') {
+                            const sloValues = report.historicalSloValues || [];
+                            const historicalLabels = [];
+                            const now = new Date();
+                            for (let i = sloValues.length - 1; i >= 0; i--) {
+                                const d = new Date();
+                                d.setDate(now.getDate() - i);
+                                historicalLabels.push(d.toLocaleDateString());
+                            }
+                            
+                            series.push({
+                                name: 'SLO Value (%)',
+                                data: sloValues.map(v => v.toFixed(3))
+                            });
+                            categories = historicalLabels;
+                            targetValue = report.target !== undefined ? report.target * 100 : null;
                         }
+                        // Calculate error budget points for the main series if it's an SLO chart
+                        else if (selector === '#chart' && report.target !== undefined) {
+                            const target = report.target;
+                            const ebValues = report.recentMetrics.map(m => {
+                                const eb = (1.0 - target > 0) ? (m.value - target) / (1.0 - target) * 100 : 100.0;
+                                return eb.toFixed(2);
+                            }).reverse();
+                            
+                            series.push({
+                                name: 'Error Budget (%)',
+                                data: ebValues
+                            });
+                            categories = timestamps;
+                            targetValue = 0; // Error budget target is 0% remaining (breach)
+
+                            // Add Trend Analysis if available (only for SLO chart)
+                            if (report.trendPoints && report.trendPoints.length > 0) {
+                                const trendData = new Array(ebValues.length - 1).fill(null);
+                                trendData.push(ebValues[ebValues.length - 1]); // Connect trend to last real point
+                                report.trendPoints.forEach(p => trendData.push(p.toFixed(2)));
+                                
+                                series.push({
+                                    name: '30-Day Trend',
+                                    data: trendData
+                                });
+                                
+                                // Extend categories for trend
+                                const lastDate = new Date(report.recentMetrics[0].timestamp);
+                                for (let i = 1; i <= report.trendPoints.length; i++) {
+                                    const nextDate = new Date(lastDate);
+                                    nextDate.setDate(lastDate.getDate() + i);
+                                    categories.push(nextDate.toLocaleDateString());
+                                }
+                            }
+                        } else {
+                            series.push({
+                                name: 'SLI Value (%)',
+                                data: sliValues
+                            });
+                            categories = timestamps;
+                            if (report.target !== undefined && report.target !== null) {
+                                targetValue = report.target * 100;
+                            }
+                        }
+                    } else {
+                        // Fallback data
+                        series = [{
+                            name: 'Remaining Budget',
+                            data: [100, 98, 97, 95, 94, 93, 91, 88, 85, 82, 80, 78, 75, 74]
+                        }];
+                        categories = Array.from({length: 14}, (_, i) => `Day ${i+1}`);
                     }
 
                     let fillConfig = {
@@ -2502,20 +2702,6 @@ spec:
                     let annotations = {};
 
                     if (targetValue !== null) {
-                        const targetOffset = Math.max(0, Math.min(100, 100 - targetValue));
-                        fillConfig = {
-                            type: 'gradient',
-                            gradient: {
-                                shadeIntensity: 1,
-                                type: 'vertical',
-                                colorStops: [
-                                    { offset: 0, color: '#10b981', opacity: 0.5 },
-                                    { offset: targetOffset, color: '#10b981', opacity: 0.5 },
-                                    { offset: targetOffset, color: '#ef4444', opacity: 0.5 },
-                                    { offset: 100, color: '#ef4444', opacity: 0.5 }
-                                ]
-                            }
-                        };
                         annotations = {
                             yaxis: [{
                                 y: targetValue,
@@ -2523,43 +2709,54 @@ spec:
                                 label: {
                                     borderColor: '#10b981',
                                     style: { color: '#fff', background: '#10b981' },
-                                    text: `Target ${targetValue.toFixed(2)}%`
+                                    text: selector === '#chart' ? 'Breach Threshold' : `Target ${targetValue.toFixed(2)}%`
                                 }
                             }]
                         };
                     }
 
                     const options = {
-                        series: [{
-                            name: seriesName,
-                            data: seriesData
-                        }],
+                        series: series,
                         chart: {
                             type: 'area',
                             height: 300,
-                            toolbar: { show: false },
-                            zoom: { enabled: false }
+                            toolbar: { show: true },
+                            zoom: { enabled: true }
                         },
                         dataLabels: { enabled: false },
-                        stroke: { curve: 'smooth', width: 2 },
-                        colors: targetValue !== null ? ['#10b981'] : ['#3b82f6'],
-                        fill: fillConfig,
+                        stroke: { 
+                            curve: 'smooth', 
+                            width: [3, 2],
+                            dashArray: [0, 5] // Trend line is dashed
+                        },
+                        colors: ['#3b82f6', '#f59e0b'],
+                        fill: {
+                            type: 'solid',
+                            opacity: [0.35, 0] // No fill for trend line
+                        },
                         annotations: annotations,
                         xaxis: {
                             categories: categories,
-                            labels: { show: categories.length <= 10 },
+                            labels: { 
+                                show: true,
+                                rotate: -45,
+                                style: { fontSize: '10px' }
+                            },
                             axisBorder: { show: false },
-                            axisTicks: { show: false }
+                            axisTicks: { show: false },
+                            tickAmount: 10
                         },
                         yaxis: {
-                            min: 0,
-                            max: 100,
                             labels: {
-                                formatter: (val) => parseFloat(val).toFixed(2) + '%'
+                                formatter: (val) => val !== null ? parseFloat(val).toFixed(2) + '%' : ''
                             }
                         },
                         grid: {
                             borderColor: '#f1f5f9'
+                        },
+                        legend: {
+                            position: 'bottom',
+                            horizontalAlign: 'center'
                         }
                     };
 
@@ -2736,6 +2933,9 @@ spec:
                     isAllReportsSelected,
                     toggleSelectAllReports,
                     toggleReportRecord,
+                    isReportOptionsModalOpen,
+                    reportOptions,
+                    openReportOptionsModal,
                     generateReport
                 };
             }

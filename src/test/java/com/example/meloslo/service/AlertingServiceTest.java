@@ -20,13 +20,15 @@ class AlertingServiceTest {
 
     private OpenSloRepository openSloRepository;
     private RestTemplate restTemplate;
+    private TaskManagementService taskManagementService;
     private AlertingService alertingService;
 
     @BeforeEach
     void setUp() {
         openSloRepository = mock(OpenSloRepository.class);
         restTemplate = mock(RestTemplate.class);
-        alertingService = new AlertingService(openSloRepository, restTemplate);
+        taskManagementService = mock(TaskManagementService.class);
+        alertingService = new AlertingService(openSloRepository, restTemplate, taskManagementService);
     }
 
     @Test
@@ -46,6 +48,11 @@ class AlertingServiceTest {
         slo.setAlertingSource(source);
 
         alertingService.sendAlertIfNeeded(slo);
+
+        ArgumentCaptor<Runnable> runnableCaptor = ArgumentCaptor.forClass(Runnable.class);
+        verify(taskManagementService).runAsyncTask(eq("Alert-1"), runnableCaptor.capture());
+        
+        runnableCaptor.getValue().run();
 
         ArgumentCaptor<HttpEntity> entityCaptor = ArgumentCaptor.forClass(HttpEntity.class);
         verify(restTemplate).postForEntity(eq("http://mock-webhook"), entityCaptor.capture(), eq(String.class));
@@ -86,6 +93,7 @@ class AlertingServiceTest {
         source.setAlertPayload("${SLO_NAME}");
 
         OpenSlo slo = new OpenSlo();
+        slo.setId(2L);
         slo.setKind("SLO");
         slo.setName("old-alert-slo");
         slo.setStatus("Breaching");
@@ -94,6 +102,10 @@ class AlertingServiceTest {
         slo.setLastAlertTime(LocalDateTime.now().minusHours(7));
 
         alertingService.sendAlertIfNeeded(slo);
+
+        ArgumentCaptor<Runnable> runnableCaptor = ArgumentCaptor.forClass(Runnable.class);
+        verify(taskManagementService).runAsyncTask(eq("Alert-2"), runnableCaptor.capture());
+        runnableCaptor.getValue().run();
 
         verify(restTemplate).postForEntity(eq("http://mock-webhook"), any(), eq(String.class));
     }
@@ -112,5 +124,59 @@ class AlertingServiceTest {
         alertingService.sendAlertIfNeeded(slo);
 
         verify(restTemplate, never()).postForEntity(anyString(), any(), any());
+    }
+
+    @Test
+    void shouldHandleMissingVariablesInPayload() {
+        OpenSlo source = new OpenSlo();
+        source.setKind("AlertingSource");
+        source.setAlertUrl("http://mock-webhook");
+        source.setAlertPayload("Fixed message with no variables");
+
+        OpenSlo slo = new OpenSlo();
+        slo.setId(3L);
+        slo.setKind("SLO");
+        slo.setName("test-slo");
+        slo.setStatus("Breaching");
+        slo.setAlertingSource(source);
+
+        alertingService.sendAlertIfNeeded(slo);
+
+        ArgumentCaptor<Runnable> runnableCaptor = ArgumentCaptor.forClass(Runnable.class);
+        verify(taskManagementService).runAsyncTask(eq("Alert-3"), runnableCaptor.capture());
+        runnableCaptor.getValue().run();
+
+        verify(restTemplate).postForEntity(eq("http://mock-webhook"), any(), eq(String.class));
+    }
+
+    @Test
+    void shouldHandleNullValuesInVariables() {
+        OpenSlo source = new OpenSlo();
+        source.setKind("AlertingSource");
+        source.setAlertUrl("http://mock-webhook");
+        source.setAlertPayload("${SLO_NAME} ${SLO_STATUS} ${SLO_VALUE}");
+
+        OpenSlo slo = new OpenSlo();
+        slo.setId(4L);
+        slo.setKind("SLO");
+        slo.setName("null-vars-slo");
+        slo.setStatus("Breaching");
+        slo.setDisplayName(null);
+        slo.setCurrentValue(null);
+        slo.setAlertingSource(source);
+
+        alertingService.sendAlertIfNeeded(slo);
+
+        ArgumentCaptor<Runnable> runnableCaptor = ArgumentCaptor.forClass(Runnable.class);
+        verify(taskManagementService).runAsyncTask(eq("Alert-4"), runnableCaptor.capture());
+        runnableCaptor.getValue().run();
+
+        ArgumentCaptor<HttpEntity> entityCaptor = ArgumentCaptor.forClass(HttpEntity.class);
+        verify(restTemplate).postForEntity(anyString(), entityCaptor.capture(), eq(String.class));
+        
+        String payload = (String) entityCaptor.getValue().getBody();
+        assertTrue(payload.contains("null-vars-slo"));
+        assertTrue(payload.contains("Breaching"));
+        assertTrue(payload.contains("0.00"));
     }
 }

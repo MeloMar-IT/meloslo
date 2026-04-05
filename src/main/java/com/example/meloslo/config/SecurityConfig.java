@@ -39,6 +39,7 @@ public class SecurityConfig {
                 .requestMatchers("/api/v1/database/**", "/api/v1/metrics/**").hasRole("ADMIN") // Restrict sensitive tools to ADMIN
                 .anyRequest().authenticated()
             )
+            .httpBasic(withDefaults())
             .formLogin(form -> form
                 .loginPage("/") // Redirect to root if not authenticated
                 .loginProcessingUrl("/api/login")
