@@ -2,14 +2,14 @@ package com.example.meloslo.dto;
 
 import java.util.List;
 
-public class ServiceReport {
+public class BusinessServiceReport {
     private String serviceName;
     private String displayName;
     private List<SloReport> sloReports;
 
-    public ServiceReport() {}
+    public BusinessServiceReport() {}
 
-    public ServiceReport(String serviceName, String displayName, List<SloReport> sloReports) {
+    public BusinessServiceReport(String serviceName, String displayName, List<SloReport> sloReports) {
         this.serviceName = serviceName;
         this.displayName = displayName;
         this.sloReports = sloReports;

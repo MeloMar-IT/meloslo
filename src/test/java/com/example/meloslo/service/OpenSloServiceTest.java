@@ -1,9 +1,8 @@
 package com.example.meloslo.service;
 
 import com.example.meloslo.dto.DashboardStats;
-import com.example.meloslo.dto.ServiceReport;
+import com.example.meloslo.dto.BusinessServiceReport;
 import com.example.meloslo.dto.SliReport;
-import com.example.meloslo.dto.SloReport;
 import com.example.meloslo.model.OpenSlo;
 import com.example.meloslo.model.SliMetric;
 import com.example.meloslo.model.User;
@@ -235,13 +234,13 @@ public class OpenSloServiceTest {
 
     @Test
     void shouldGetServiceReport() {
-        OpenSlo serviceRecord = new OpenSlo("openslo/v1", "Service", "TestService", "Test Service", "{}");
+        OpenSlo serviceRecord = new OpenSlo("openslo/v1", "BusinessService", "TestService", "Test Service", "{}");
         serviceRecord.setId(3L);
         serviceRecord.setSlos(Arrays.asList(slo));
 
         when(repository.findById(3L)).thenReturn(Optional.of(serviceRecord));
 
-        ServiceReport report = service.getServiceReport(3L);
+        BusinessServiceReport report = service.getServiceReport(3L);
 
         assertThat(report).isNotNull();
         assertThat(report.getServiceName()).isEqualTo("TestService");
@@ -250,19 +249,19 @@ public class OpenSloServiceTest {
     }
     @Test
     void shouldGetDashboardStats() {
-        OpenSlo serviceRecord = new OpenSlo("openslo/v1", "Service", "TestService", "Test Service", "{}");
+        OpenSlo serviceRecord = new OpenSlo("openslo/v1", "BusinessService", "TestService", "Test Service", "{}");
         OpenSlo sliRecord = new OpenSlo("openslo/v1", "SLI", "TestSLI", "Test SLI", "{}");
         OpenSlo sloRecord = new OpenSlo("openslo/v1", "SLO", "TestSLO", "Test SLO", "spec:\n  objectives:\n    - target: 0.95\n  timeWindow:\n    - duration: 30d");
         sloRecord.setSlis(Arrays.asList(sliRecord));
         
-        when(repository.findByKind("Service")).thenReturn(Arrays.asList(serviceRecord));
+        when(repository.findByKind("BusinessService")).thenReturn(Arrays.asList(serviceRecord));
         when(repository.findByKind("SLO")).thenReturn(Arrays.asList(sloRecord));
         
         when(metricRepository.findBySliAndTimestampAfterOrderByTimestampDesc(any(), any())).thenReturn(Arrays.asList(new SliMetric(null, 0.98, null, null)));
 
         DashboardStats stats = service.getDashboardStats();
 
-        assertThat(stats.getTotalServices()).isEqualTo(1);
+        assertThat(stats.getTotalBusinessServices()).isEqualTo(1);
         assertThat(stats.getTotalSlos()).isEqualTo(1);
         assertThat(stats.getHealthySlos()).isEqualTo(1);
         assertThat(stats.getWarningSlos()).isEqualTo(0);
@@ -271,12 +270,12 @@ public class OpenSloServiceTest {
 
     @Test
     void shouldGetDashboardStatsWithWarning() {
-        OpenSlo serviceRecord = new OpenSlo("openslo/v1", "Service", "TestService", "Test Service", "{}");
+        OpenSlo serviceRecord = new OpenSlo("openslo/v1", "BusinessService", "TestService", "Test Service", "{}");
         OpenSlo sliRecord = new OpenSlo("openslo/v1", "SLI", "TestSLI", "Test SLI", "{}");
         OpenSlo sloRecord = new OpenSlo("openslo/v1", "SLO", "TestSLO", "Test SLO", "spec:\n  objectives:\n    - target: 0.95\n  timeWindow:\n    - duration: 30d");
         sloRecord.setSlis(Arrays.asList(sliRecord));
         
-        when(repository.findByKind("Service")).thenReturn(Arrays.asList(serviceRecord));
+        when(repository.findByKind("BusinessService")).thenReturn(Arrays.asList(serviceRecord));
         when(repository.findByKind("SLO")).thenReturn(Arrays.asList(sloRecord));
         
         // Target 0.95, value 0.955 -> error budget = (0.955 - 0.95) / (1 - 0.95) * 100 = 0.005 / 0.05 * 100 = 10%
@@ -292,12 +291,12 @@ public class OpenSloServiceTest {
 
     @Test
     void shouldGetDashboardStatsWithBreaching() {
-        OpenSlo serviceRecord = new OpenSlo("openslo/v1", "Service", "TestService", "Test Service", "{}");
+        OpenSlo serviceRecord = new OpenSlo("openslo/v1", "BusinessService", "TestService", "Test Service", "{}");
         OpenSlo sliRecord = new OpenSlo("openslo/v1", "SLI", "TestSLI", "Test SLI", "{}");
         OpenSlo sloRecord = new OpenSlo("openslo/v1", "SLO", "TestSLO", "Test SLO", "spec:\n  objectives:\n    - target: 0.95\n  timeWindow:\n    - duration: 30d");
         sloRecord.setSlis(Arrays.asList(sliRecord));
         
-        when(repository.findByKind("Service")).thenReturn(Arrays.asList(serviceRecord));
+        when(repository.findByKind("BusinessService")).thenReturn(Arrays.asList(serviceRecord));
         when(repository.findByKind("SLO")).thenReturn(Arrays.asList(sloRecord));
         
         // Target 0.95, value 0.94 -> error budget = (0.94 - 0.95) / (1 - 0.95) * 100 = -0.01 / 0.05 * 100 = -20%
@@ -313,7 +312,7 @@ public class OpenSloServiceTest {
 
     @Test
     void shouldPopulateServiceTransientFields() {
-        OpenSlo serviceRecord = new OpenSlo("openslo/v1", "Service", "TestService", "Test Service", "{}");
+        OpenSlo serviceRecord = new OpenSlo("openslo/v1", "BusinessService", "TestService", "Test Service", "{}");
         OpenSlo sliRecord = new OpenSlo("openslo/v1", "SLI", "TestSLI", "Test SLI", "{}");
         OpenSlo sloRecord = new OpenSlo("openslo/v1", "SLO", "TestSLO", "Test SLO", "spec:\n  objectives:\n    - target: 0.95\n  timeWindow:\n    - duration: 30d");
         sloRecord.setSlis(Arrays.asList(sliRecord));

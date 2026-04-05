@@ -1,7 +1,7 @@
 package com.example.meloslo.service;
 
 import com.example.meloslo.dto.DashboardStats;
-import com.example.meloslo.dto.ServiceReport;
+import com.example.meloslo.dto.BusinessServiceReport;
 import com.example.meloslo.dto.SliReport;
 import com.example.meloslo.dto.SloReport;
 import com.example.meloslo.model.SliMetric;
@@ -123,7 +123,7 @@ public class OpenSloService {
             record.setErrorBudget(report.getErrorBudget());
             record.setStatus(determineStatus(report.getErrorBudget()));
             record.setCurrentValue(report.getCurrentValue());
-        } else if ("Service".equalsIgnoreCase(record.getKind())) {
+        } else if ("BusinessService".equalsIgnoreCase(record.getKind())) {
             List<OpenSlo> childSlos = record.getSlos();
             if (childSlos != null && !childSlos.isEmpty()) {
                 double totalValue = 0;
@@ -260,7 +260,7 @@ public class OpenSloService {
     }
 
     public DashboardStats getDashboardStats() {
-        List<OpenSlo> services = repository.findByKind("Service");
+        List<OpenSlo> services = repository.findByKind("BusinessService");
         List<OpenSlo> slos = repository.findByKind("SLO");
         
         List<OpenSlo> filteredServices = filterByDepartment(services);
@@ -318,12 +318,12 @@ public class OpenSloService {
         return new SloReport(slo.getName(), target, currentSloValue, errorBudget, status, recentMetrics);
     }
 
-    public ServiceReport getServiceReport(Long id) {
+    public BusinessServiceReport getServiceReport(Long id) {
         OpenSlo service = repository.findById(id)
                 .orElseThrow(() -> new RuntimeException("OpenSLO record not found with id " + id));
 
-        if (!"Service".equalsIgnoreCase(service.getKind())) {
-            throw new RuntimeException("Record is not of kind Service");
+        if (!"BusinessService".equalsIgnoreCase(service.getKind())) {
+            throw new RuntimeException("Record is not of kind BusinessService");
         }
 
         List<SloReport> sloReports = new ArrayList<>();
@@ -333,7 +333,7 @@ public class OpenSloService {
             }
         }
 
-        return new ServiceReport(service.getName(), service.getDisplayName(), sloReports);
+        return new BusinessServiceReport(service.getName(), service.getDisplayName(), sloReports);
     }
 
     public Double parseTargetFromSpec(String spec) {
