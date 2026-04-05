@@ -58,7 +58,7 @@ public class OpenSloControllerUnitTest {
 
         mockMvc.perform(get("/api/v1/openslo/dashboard-stats"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.totalServices").value(5))
+                .andExpect(jsonPath("$.totalBusinessServices").value(5))
                 .andExpect(jsonPath("$.healthySlos").value(8));
     }
 

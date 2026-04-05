@@ -454,7 +454,7 @@ public class OpenSloService {
         return 0.99;
     }
 
-    private int parseWindowDaysFromSpec(String spec) {
+    public int parseWindowDaysFromSpec(String spec) {
         try {
             JsonNode root = yamlMapper.readTree(spec);
             JsonNode timeWindow = root.path("spec").path("timeWindow");
