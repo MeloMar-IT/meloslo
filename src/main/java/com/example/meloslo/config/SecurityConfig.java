@@ -3,6 +3,7 @@ package com.example.meloslo.config;
 import com.example.meloslo.repository.UserRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
@@ -25,20 +26,34 @@ public class SecurityConfig {
 
     private final UserRepository userRepository;
 
+    @Value("${spring.h2.console.enabled:false}")
+    private boolean h2ConsoleEnabled;
+
     public SecurityConfig(UserRepository userRepository) {
         this.userRepository = userRepository;
     }
 
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
+        if (h2ConsoleEnabled) {
+            http.headers(headers -> headers.frameOptions(HeadersConfigurer.FrameOptionsConfig::disable));
+        }
+
         http
-            .csrf(AbstractHttpConfigurer::disable) // Disable CSRF for simplicity in this exercise
-            .authorizeHttpRequests(auth -> auth
-                .requestMatchers("/", "/index.html", "/static/**", "/h2-console/**").permitAll()
-                .requestMatchers("/api/v1/users/me").permitAll() // Allow getting current user info (checks auth)
-                .requestMatchers("/api/v1/database/**", "/api/v1/metrics/**").hasRole("ADMIN") // Restrict sensitive tools to ADMIN
-                .anyRequest().authenticated()
-            )
+            .csrf(AbstractHttpConfigurer::disable) // Keep disabled for now as it's a stateless-style API
+            .authorizeHttpRequests(auth -> {
+                var authRequests = auth
+                    .requestMatchers("/", "/index.html", "/static/**").permitAll();
+                
+                if (h2ConsoleEnabled) {
+                    authRequests.requestMatchers("/h2-console/**").permitAll();
+                }
+                
+                authRequests
+                    .requestMatchers("/api/v1/users/me").permitAll()
+                    .requestMatchers("/api/v1/database/**", "/api/v1/metrics/**").hasRole("ADMIN")
+                    .anyRequest().authenticated();
+            })
             .httpBasic(withDefaults())
             .formLogin(form -> form
                 .loginPage("/") // Redirect to root if not authenticated
@@ -68,8 +83,7 @@ public class SecurityConfig {
                     response.getWriter().flush();
                 })
                 .permitAll()
-            )
-            .headers(headers -> headers.frameOptions(HeadersConfigurer.FrameOptionsConfig::disable)); // Allow H2 console
+            );
 
         return http.build();
     }

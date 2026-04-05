@@ -49,10 +49,10 @@ class ReportControllerUnitTest {
     }
 
     @Test
-    void shouldReturn3xxWhenUnauthenticated() throws Exception {
+    void shouldReturnUnauthorizedWhenUnauthenticated() throws Exception {
         mockMvc.perform(post("/api/v1/reports/pdf")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"ids\": [1, 2, 3]}"))
-                .andExpect(status().is3xxRedirection());
+                .andExpect(status().isUnauthorized());
     }
 }

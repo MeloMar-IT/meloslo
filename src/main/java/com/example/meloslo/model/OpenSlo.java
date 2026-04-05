@@ -65,17 +65,17 @@ public class OpenSlo {
 
     private LocalDateTime lastAlertTime;
 
-    @ManyToOne(fetch = FetchType.EAGER)
+    @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "service_id")
     @JsonIgnoreProperties({"slos", "slis", "indicatorSlis"})
     private OpenSlo service;
 
-    @ManyToOne(fetch = FetchType.EAGER)
+    @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "datasource_id")
     @JsonIgnoreProperties({"slos", "slis", "indicatorSlis", "service"})
     private OpenSlo datasource;
 
-    @ManyToMany(fetch = FetchType.EAGER)
+    @ManyToMany(fetch = FetchType.LAZY)
     @JoinTable(
         name = "slo_slis",
         joinColumns = @JoinColumn(name = "slo_id"),
@@ -84,20 +84,20 @@ public class OpenSlo {
     @JsonIgnoreProperties({"slos", "slis", "service", "indicatorSlis", "datasource"})
     private List<OpenSlo> slis = new ArrayList<>();
 
-    @OneToMany(mappedBy = "service", fetch = FetchType.EAGER)
+    @OneToMany(mappedBy = "service", fetch = FetchType.LAZY)
     @JsonIgnoreProperties({"service", "slis", "indicatorSlis", "datasource"})
     private List<OpenSlo> slos = new ArrayList<>();
 
-    @OneToMany(mappedBy = "datasource", fetch = FetchType.EAGER)
+    @OneToMany(mappedBy = "datasource", fetch = FetchType.LAZY)
     @JsonIgnoreProperties({"datasource", "slis", "slos", "service"})
     private List<OpenSlo> indicatorSlis = new ArrayList<>();
 
-    @ManyToOne(fetch = FetchType.EAGER)
+    @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "alerting_source_id")
     @JsonIgnoreProperties({"slos", "slis", "indicatorSlis", "service", "datasource", "alertingSource"})
     private OpenSlo alertingSource;
 
-    @OneToMany(mappedBy = "alertingSource", fetch = FetchType.EAGER)
+    @OneToMany(mappedBy = "alertingSource", fetch = FetchType.LAZY)
     @JsonIgnoreProperties({"alertingSource", "slis", "slos", "service", "datasource"})
     private List<OpenSlo> linkedSlos = new ArrayList<>();
 
