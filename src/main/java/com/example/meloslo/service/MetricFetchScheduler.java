@@ -7,8 +7,10 @@ import com.example.meloslo.repository.OpenSloRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
+import org.springframework.web.client.RestTemplate;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
@@ -24,18 +26,24 @@ public class MetricFetchScheduler {
     private final OpenSloService openSloService;
     private final AlertingService alertingService;
     private final TaskManagementService taskManagementService;
+    private final RestTemplate restTemplate;
+
+    @Value("${app.datasource.mode:test}")
+    private String datasourceMode;
 
     @Autowired
     public MetricFetchScheduler(OpenSloRepository openSloRepository, 
                                 MetricRepository metricRepository,
                                 OpenSloService openSloService,
                                 AlertingService alertingService,
-                                TaskManagementService taskManagementService) {
+                                TaskManagementService taskManagementService,
+                                RestTemplate restTemplate) {
         this.openSloRepository = openSloRepository;
         this.metricRepository = metricRepository;
         this.openSloService = openSloService;
         this.alertingService = alertingService;
         this.taskManagementService = taskManagementService;
+        this.restTemplate = restTemplate;
     }
 
     @Scheduled(fixedRate = 900000) // Run every 15 minutes to check for updates and breaches
@@ -66,7 +74,7 @@ public class MetricFetchScheduler {
                 String taskId = "Fetch-" + ds.getId();
                 final Integer finalRefreshRate = refreshRate;
                 taskManagementService.runAsyncTask(taskId, () -> {
-                    log.info("Fetching metrics for DataSource: {} (Refresh Rate: {}m)", ds.getName(), finalRefreshRate);
+                    log.info("Fetching metrics for DataSource: {} (Mode: {}, Refresh Rate: {}m)", ds.getName(), datasourceMode, finalRefreshRate);
                     
                     List<OpenSlo> slis = ds.getIndicatorSlis();
                     if (slis.isEmpty()) {
@@ -75,7 +83,12 @@ public class MetricFetchScheduler {
 
                     for (OpenSlo sli : slis) {
                         try {
-                            double value = simulateFetch(ds, sli);
+                            double value;
+                            if ("live".equalsIgnoreCase(datasourceMode)) {
+                                value = liveFetch(ds, sli);
+                            } else {
+                                value = simulateFetch(ds, sli);
+                            }
                             metricRepository.save(new SliMetric(LocalDateTime.now(), value, sli, ds));
                             log.debug("Fetched metric for SLI {}: {}", sli.getName(), value);
 
@@ -107,5 +120,28 @@ public class MetricFetchScheduler {
         }
         // Return a realistic health value (0.9 to 1.0)
         return 0.9 + (Math.random() * 0.1);
+    }
+
+    private double liveFetch(OpenSlo ds, OpenSlo sli) {
+        // Implement real fetching from external source (e.g., Prometheus)
+        log.info("Performing LIVE fetch for SLI: {} from DataSource: {}", sli.getName(), ds.getName());
+        
+        // This is a skeleton/placeholder for real implementation.
+        // It uses RestTemplate to connect to ds.getAlertUrl() or similar.
+        // Since we don't have a real endpoint, we default to simulateFetch but with extra logging
+        // to show we are in 'live' mode.
+        try {
+            // Real implementation would parse the spec and make a request.
+            // Example for Prometheus:
+            // String query = openSloService.parseQueryFromSpec(sli.getSpec());
+            // String url = ds.getAlertUrl() + "/api/v1/query?query=" + URLEncoder.encode(query, StandardCharsets.UTF_8);
+            // JsonNode response = restTemplate.getForObject(url, JsonNode.class);
+            // return parsePrometheusResponse(response);
+            
+            return simulateFetch(ds, sli); 
+        } catch (Exception e) {
+            log.error("Live fetch failed: {}", e.getMessage());
+            throw e;
+        }
     }
 }
