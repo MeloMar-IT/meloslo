@@ -25,6 +25,7 @@ import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.within;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
@@ -328,5 +329,30 @@ public class OpenSloServiceTest {
         assertThat(result.getCurrentValue()).isCloseTo(0.98, within(0.001));
         assertThat(result.getStatus()).isEqualTo("Healthy");
         assertThat(result.getErrorBudget()).isNotNull();
+    }
+
+    @Test
+    void shouldParseTargetFromSpec() {
+        String spec = "spec:\n  objectives:\n    - target: 0.999";
+        assertThat(service.parseTargetFromSpec(spec)).isEqualTo(0.999);
+
+        String noTargetSpec = "spec:\n  objectives: []";
+        assertThat(service.parseTargetFromSpec(noTargetSpec)).isEqualTo(0.99); // Default value
+
+        assertThat(service.parseTargetFromSpec(null)).isEqualTo(0.99);
+    }
+
+    @Test
+    void shouldParseWindowDaysFromSpec() {
+        String spec = "spec:\n  timeWindow:\n    - duration: 30d";
+        assertThat(service.parseWindowDaysFromSpec(spec)).isEqualTo(30);
+
+        String smallWindow = "spec:\n  timeWindow:\n    - duration: 7d";
+        assertThat(service.parseWindowDaysFromSpec(smallWindow)).isEqualTo(7);
+
+        String invalidWindow = "spec:\n  timeWindow:\n    - duration: abc";
+        assertThat(service.parseWindowDaysFromSpec(invalidWindow)).isEqualTo(30); // Default
+
+        assertThat(service.parseWindowDaysFromSpec(null)).isEqualTo(30);
     }
 }
