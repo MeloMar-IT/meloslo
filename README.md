@@ -2,7 +2,7 @@
 
 ## GitFlow Workflow
 
-This repository follows the **GitFlow** branching model. For more details, see [GITFLOW.md](./GITFLOW.md).
+This repository follows the **GitFlow** branching model. For more details, see [GITFLOW.md](Docs/GITFLOW.md).
 
 ### Core Branches
 - `main`: Production-ready code.
