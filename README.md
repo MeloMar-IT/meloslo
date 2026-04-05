@@ -56,6 +56,55 @@ MeloSlo includes a secure login system and administrative tools to manage users 
 - **Default Administrator**: Username: `admin`, Password: `admin` (Full Access)
 - **Test User**: Username: `testuser`, Password: `testuser` (Restricted to 'Finance' and 'Engineering' departments)
 
+### Application Modes: Test vs Live
+
+The application can run in two different modes, controlled by the `app.datasource.mode` property.
+
+- **Test Mode (`test`)**: (Default) The application generates simulated metric data for all configured DataSources. This is ideal for demonstrations, local development, and exploring the UI without needing real external connections. In this mode, the database is automatically reloaded with sample data on startup if it's found to be incomplete.
+- **Live Mode (`live`)**: The application attempts to connect to real external endpoints defined in your DataSources to fetch metrics. In this mode, the database initializer only seeds essential system users (`admin` and `testuser`) and does not automatically reload test data, preserving your existing configuration.
+
+To switch modes, update `src/main/resources/application.properties`:
+```properties
+# Application Mode: 'test' for simulated data, 'live' for real connections
+app.datasource.mode=live
+```
+
+### DTAP Environments and Configuration
+
+MeloSlo supports different configuration files for Development, Testing, Acceptance, and Production (DTAP) environments using Spring Boot's profile mechanism.
+
+#### Using Profiles
+
+You can create environment-specific property files in `src/main/resources/` following the naming convention `application-{profile}.properties`.
+
+Example files provided:
+- `application-dev.properties` (Development/Test mode)
+- `application-prod.properties` (Production/Live mode)
+
+To start the application with a specific profile, use the `-Dspring.profiles.active` system property:
+
+```bash
+# Start in Development mode
+java -Dspring.profiles.active=dev -jar target/meloslo-0.0.1-SNAPSHOT.jar
+
+# Start in Production mode
+java -Dspring.profiles.active=prod -jar target/meloslo-0.0.1-SNAPSHOT.jar
+```
+
+#### Using External Configuration Files
+
+If you need to use a property file located outside the project (e.g., at startup on a server), you can use the `spring.config.location` property:
+
+```bash
+java -jar target/meloslo-0.0.1-SNAPSHOT.jar --spring.config.location=file:/path/to/your/custom-application.properties
+```
+
+Alternatively, you can add an additional location to the default search path:
+
+```bash
+java -jar target/meloslo-0.0.1-SNAPSHOT.jar --spring.config.additional-location=file:/path/to/config/
+```
+
 #### Access Control
 - **Full Access**: Administrators (users without departmental restrictions) see all records in the system.
 - **Departmental Restriction**: Users can be assigned to one or more departments (separated by commas). These users only see records associated with any of those departments across all views (Dashboard, Services, etc.).

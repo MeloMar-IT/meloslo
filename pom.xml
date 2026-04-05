@@ -12,7 +12,7 @@
 
     <name>openslo-api</name>
     <description>Spring Boot API for managing OpenSLO records in a database</description>
-    <url>https://github.com/example/openslo-api</url>
+    <url>https://github.com/MeloMar-IT/meloslo</url>
 
     <licenses>
         <license>
