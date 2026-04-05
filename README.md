@@ -2,7 +2,7 @@
 
 ## GitFlow Workflow
 
-This repository follows the **GitFlow** branching model. For more details, see [GITFLOW.md](./GITFLOW.md).
+This repository follows the **GitFlow** branching model. For more details, see [GITFLOW.md](Docs/GITFLOW.md).
 
 ### Core Branches
 - `main`: Production-ready code.
@@ -18,7 +18,7 @@ OpenSLO is an open-source specification for defining Service Level Objectives (S
 
 ### Core Concepts
 
-1.  **Service**: A logical collection of SLOs. It represents a system or component.
+1.  **Business Service**: A logical collection of SLOs. It represents a system or component.
 2.  **SLI (Service Level Indicator)**: A metric that measures some aspect of the service (e.g., latency, availability). **Important**: All SLI metric values must be in the range of **0 to 100**.
 3.  **SLO (Service Level Objective)**: A target value or range of values for an SLI that defines the expected level of service.
 4.  **Error Budget**: The amount of service unreliability that is allowed before the SLO is violated.
@@ -34,7 +34,7 @@ The application features a sidebar with the following views:
 - **SLIs**: Manage your service level indicators.
 - **Data Sources**: Manage your data source records (e.g., Prometheus).
 - **Alerting**: Manage your alerting source records (e.g., Slack webhooks) to receive notifications when SLOs are breached.
-- **Documentation**: Access this documentation directly in the app.
+- **Documentation**: Access this documentation directly in the app. For a comprehensive walkthrough of features, see the [MeloSlo User Guide](./Docs/USER_GUIDE.md).
 - **Query Tool**: Execute raw SQL queries against the database (Administrator only). Use this tool to inspect table structures (`api/v1/database/tables`) and verify raw data records across `OPEN_SLO`, `SLI_METRIC`, and `USER` tables. Only `SELECT` queries are permitted for security.
 - **User Admin**: Manage user accounts and permissions (Administrator only).
 - **Reports**: Generate annual performance reports for Services and SLOs in PDF format, including performance graphs for the last year. Reports are compliance-aware and automatically handle data gaps by visualizing them as zero-performance periods.

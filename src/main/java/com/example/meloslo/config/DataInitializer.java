@@ -99,16 +99,16 @@ public class DataInitializer {
         userRepository.save(new User("admin", passwordEncoder.encode("admin"), "admin@meloslo.com", null));
         userRepository.save(new User("testuser", passwordEncoder.encode("testuser"), "testuser@finance.com", "Finance,Engineering"));
 
-        // 1. Create a Service
-        OpenSlo paymentService = new OpenSlo("openslo/v1", "Service", "payment-service", "Payment Service", 
-            "apiVersion: openslo/v1\nkind: Service\nmetadata:\n  name: payment-service\nspec:\n  description: Core payment processing service");
+        // 1. Create a Business Service
+        OpenSlo paymentService = new OpenSlo("openslo/v1", "BusinessService", "payment-service", "Payment Service", 
+            "apiVersion: openslo/v1\nkind: BusinessService\nmetadata:\n  name: payment-service\nspec:\n  description: Core payment processing service");
         paymentService.setDepartment("Finance");
         paymentService.setManager("Jane Doe");
         paymentService = repository.save(paymentService);
 
-        // 2. Create Engineering Service and SLOs
-        OpenSlo engineeringService = new OpenSlo("openslo/v1", "Service", "engineering-core", "Engineering Core", 
-            "apiVersion: openslo/v1\nkind: Service\nmetadata:\n  name: engineering-core\nspec:\n  description: Core engineering platform services");
+        // 2. Create Engineering Business Service and SLOs
+        OpenSlo engineeringService = new OpenSlo("openslo/v1", "BusinessService", "engineering-core", "Engineering Core", 
+            "apiVersion: openslo/v1\nkind: BusinessService\nmetadata:\n  name: engineering-core\nspec:\n  description: Core engineering platform services");
         engineeringService.setDepartment("Engineering");
         engineeringService.setManager("Bob Builder");
         engineeringService = repository.save(engineeringService);
