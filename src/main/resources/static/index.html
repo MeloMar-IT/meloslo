@@ -674,6 +674,10 @@
                                     <h3 class="font-bold text-slate-800 mb-4">Error Budget Burndown</h3>
                                     <div id="chart"></div>
                                 </div>
+                                <div class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+                                    <h3 class="font-bold text-slate-800 mb-4">SLO Value (Last 30 Days)</h3>
+                                    <div id="slo-value-chart"></div>
+                                </div>
                                 <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
                                     <div class="p-6 border-b border-slate-200">
                                         <h3 class="font-bold text-slate-800">Specification</h3>
@@ -2403,12 +2407,14 @@ spec:
                             selectedSloReport.value = report;
                             nextTick(() => {
                                 renderChart(report, '#chart');
+                                renderChart(report, '#slo-value-chart');
                                 if (window.Prism) window.Prism.highlightAll();
                             });
                         })
                         .catch(() => {
                             nextTick(() => {
                                 renderChart(null, '#chart');
+                                renderChart(null, '#slo-value-chart');
                                 if (window.Prism) window.Prism.highlightAll();
                             });
                         });
@@ -2480,12 +2486,29 @@ spec:
                     let categories = [];
                     let targetValue = null;
 
-                    if (report && report.recentMetrics && report.recentMetrics.length > 0) {
-                        const sliValues = report.recentMetrics.map(m => (m.value * 100).toFixed(2)).reverse();
-                        const timestamps = report.recentMetrics.map(m => new Date(m.timestamp).toLocaleDateString()).reverse();
+                    if (report && ((report.recentMetrics && report.recentMetrics.length > 0) || (report.historicalSloValues && report.historicalSloValues.length > 0))) {
+                        const timestamps = report.recentMetrics ? report.recentMetrics.map(m => new Date(m.timestamp).toLocaleDateString()).reverse() : [];
                         
+                        // Handle SLO value chart
+                        if (selector === '#slo-value-chart') {
+                            const sloValues = report.historicalSloValues || [];
+                            const historicalLabels = [];
+                            const now = new Date();
+                            for (let i = sloValues.length - 1; i >= 0; i--) {
+                                const d = new Date();
+                                d.setDate(now.getDate() - i);
+                                historicalLabels.push(d.toLocaleDateString());
+                            }
+                            
+                            series.push({
+                                name: 'SLO Value (%)',
+                                data: sloValues.map(v => v.toFixed(3))
+                            });
+                            categories = historicalLabels;
+                            targetValue = report.target !== undefined ? report.target * 100 : null;
+                        }
                         // Calculate error budget points for the main series if it's an SLO chart
-                        if (selector === '#chart' && report.target !== undefined) {
+                        else if (selector === '#chart' && report.target !== undefined) {
                             const target = report.target;
                             const ebValues = report.recentMetrics.map(m => {
                                 const eb = (1.0 - target > 0) ? (m.value - target) / (1.0 - target) * 100 : 100.0;
@@ -2602,8 +2625,8 @@ spec:
                             borderColor: '#f1f5f9'
                         },
                         legend: {
-                            position: 'top',
-                            horizontalAlign: 'right'
+                            position: 'bottom',
+                            horizontalAlign: 'center'
                         }
                     };
 
