@@ -1,5 +1,6 @@
 package com.example.meloslo.service;
 
+import com.example.meloslo.dto.ReportOptionsDTO;
 import com.example.meloslo.model.OpenSlo;
 import com.example.meloslo.model.SliMetric;
 import com.example.meloslo.repository.MetricRepository;
@@ -67,8 +68,11 @@ class ReportServiceTest {
         metrics.add(new SliMetric(LocalDateTime.now(), 0.98, sli, null));
         when(metricRepository.findBySliAndTimestampAfterOrderByTimestampDesc(any(), any())).thenReturn(metrics);
 
+        ReportOptionsDTO options = new ReportOptionsDTO();
+        options.setIds(List.of(1L, 2L));
+
         // Act
-        byte[] pdf = reportService.generatePdfReport(List.of(1L, 2L));
+        byte[] pdf = reportService.generatePdfReport(options);
 
         // Assert
         assertNotNull(pdf);
@@ -91,8 +95,11 @@ class ReportServiceTest {
         when(openSloService.getRecordById(1L)).thenReturn(Optional.of(record));
         when(openSloService.getCurrentUserDepartments()).thenReturn(Collections.singletonList("Public"));
 
+        ReportOptionsDTO options = new ReportOptionsDTO();
+        options.setIds(List.of(1L));
+
         // Act
-        byte[] pdf = reportService.generatePdfReport(List.of(1L));
+        byte[] pdf = reportService.generatePdfReport(options);
 
         // Assert
         assertNotNull(pdf);
@@ -117,11 +124,92 @@ class ReportServiceTest {
         when(openSloService.parseTargetFromSpec(anyString())).thenReturn(0.95);
         when(metricRepository.findBySliAndTimestampAfterOrderByTimestampDesc(any(), any())).thenReturn(new ArrayList<>());
 
+        ReportOptionsDTO options = new ReportOptionsDTO();
+        options.setIds(List.of(10L));
+
         // Act
-        byte[] pdf = reportService.generatePdfReport(List.of(10L));
+        byte[] pdf = reportService.generatePdfReport(options);
 
         // Assert
         assertNotNull(pdf);
         assertTrue(pdf.length > 0);
+    }
+
+    @Test
+    void shouldHandleVariousTimePeriods() {
+        // Arrange
+        OpenSlo slo = new OpenSlo();
+        slo.setId(20L);
+        slo.setKind("SLO");
+        slo.setDisplayName("Time Period SLO");
+        slo.setDepartment("Engineering");
+        slo.setSpec("target: 0.9");
+
+        when(openSloService.getRecordById(20L)).thenReturn(Optional.of(slo));
+        when(openSloService.getCurrentUserDepartments()).thenReturn(Collections.emptyList());
+        when(metricRepository.findBySliAndTimestampAfterOrderByTimestampDesc(any(), any())).thenReturn(new ArrayList<>());
+
+        ReportOptionsDTO options = new ReportOptionsDTO();
+        options.setIds(List.of(20L));
+        
+        // Test DAYS
+        options.setTimeValue(7);
+        options.setTimeUnit("DAYS");
+        byte[] pdfDays = reportService.generatePdfReport(options);
+        assertNotNull(pdfDays);
+
+        // Test MONTHS
+        options.setTimeValue(3);
+        options.setTimeUnit("MONTHS");
+        byte[] pdfMonths = reportService.generatePdfReport(options);
+        assertNotNull(pdfMonths);
+        
+        // Test YEARS
+        options.setTimeValue(2);
+        options.setTimeUnit("YEARS");
+        byte[] pdfYears = reportService.generatePdfReport(options);
+        assertNotNull(pdfYears);
+    }
+
+    @Test
+    void shouldHandleOptionalCharts() {
+        // Arrange
+        OpenSlo slo = new OpenSlo();
+        slo.setId(30L);
+        slo.setKind("SLO");
+        slo.setDisplayName("Optional Chart SLO");
+        slo.setDepartment("Engineering");
+        slo.setSpec("target: 0.99");
+
+        when(openSloService.getRecordById(30L)).thenReturn(Optional.of(slo));
+        when(openSloService.getCurrentUserDepartments()).thenReturn(Collections.emptyList());
+        when(metricRepository.findBySliAndTimestampAfterOrderByTimestampDesc(any(), any())).thenReturn(new ArrayList<>());
+
+        ReportOptionsDTO options = new ReportOptionsDTO();
+        options.setIds(List.of(30L));
+        
+        // Disable charts
+        options.setIncludeSloCharts(false);
+        byte[] pdfNoCharts = reportService.generatePdfReport(options);
+        assertNotNull(pdfNoCharts);
+
+        // Enable only performance chart
+        options.setIncludeSloCharts(true);
+        options.setIncludeMetricsChart(true);
+        options.setIncludeErrorBudgetChart(false);
+        byte[] pdfPerfChartOnly = reportService.generatePdfReport(options);
+        assertNotNull(pdfPerfChartOnly);
+
+        // Enable only EB chart
+        options.setIncludeMetricsChart(false);
+        options.setIncludeErrorBudgetChart(true);
+        byte[] pdfEbChartOnly = reportService.generatePdfReport(options);
+        assertNotNull(pdfEbChartOnly);
+        
+        // Enable both
+        options.setIncludeMetricsChart(true);
+        options.setIncludeErrorBudgetChart(true);
+        byte[] pdfBothCharts = reportService.generatePdfReport(options);
+        assertNotNull(pdfBothCharts);
     }
 }

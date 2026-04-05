@@ -1,5 +1,6 @@
 package com.example.meloslo.controller;
 
+import com.example.meloslo.dto.ReportOptionsDTO;
 import com.example.meloslo.service.ReportService;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
@@ -21,8 +22,8 @@ public class ReportController {
     }
 
     @PostMapping("/pdf")
-    public ResponseEntity<byte[]> downloadReport(@RequestBody List<Long> ids) {
-        byte[] pdf = reportService.generatePdfReport(ids);
+    public ResponseEntity<byte[]> downloadReport(@RequestBody ReportOptionsDTO options) {
+        byte[] pdf = reportService.generatePdfReport(options);
         
         String filename = "MeloSlo_Report_" + LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd_HHmm")) + ".pdf";
         
