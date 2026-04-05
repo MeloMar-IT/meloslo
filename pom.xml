@@ -12,6 +12,15 @@
 
     <name>openslo-api</name>
     <description>Spring Boot API for managing OpenSLO records in a database</description>
+    <url>https://github.com/example/openslo-api</url>
+
+    <licenses>
+        <license>
+            <name>GNU General Public License v3.0</name>
+            <url>https://www.gnu.org/licenses/gpl-3.0.txt</url>
+            <distribution>repo</distribution>
+        </license>
+    </licenses>
 
     <parent>
         <groupId>org.springframework.boot</groupId>

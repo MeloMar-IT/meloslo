@@ -1,5 +1,11 @@
 # MeloSlo Documentation
 
+## Terms of Use
+**Disclaimer**: MeloSlo is provided as an open-source project. By using this software, you acknowledge and agree that you do so at your **own risk**. The authors and contributors provide the software "as is," without warranty of any kind, express or implied, including but not limited to the warranties of merchantability, fitness for a particular purpose, and non-infringement.
+
+## License
+MeloSlo is licensed under the [GNU General Public License v3.0](LICENSE).
+
 ## GitFlow Workflow
 
 This repository follows the **GitFlow** branching model. For more details, see [GITFLOW.md](Docs/GITFLOW.md).
