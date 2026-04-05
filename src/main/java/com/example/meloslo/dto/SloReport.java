@@ -10,17 +10,23 @@ public class SloReport {
     private Double errorBudget;
     private String status;
     private List<SliMetric> recentMetrics;
+    private List<Double> trendPoints;
 
     public SloReport() {
     }
 
     public SloReport(String name, Double target, Double currentValue, Double errorBudget, String status, List<SliMetric> recentMetrics) {
+        this(name, target, currentValue, errorBudget, status, recentMetrics, null);
+    }
+
+    public SloReport(String name, Double target, Double currentValue, Double errorBudget, String status, List<SliMetric> recentMetrics, List<Double> trendPoints) {
         this.name = name;
         this.target = target;
         this.currentValue = currentValue;
         this.errorBudget = errorBudget;
         this.status = status;
         this.recentMetrics = recentMetrics;
+        this.trendPoints = trendPoints;
     }
 
     public String getName() {
@@ -69,5 +75,13 @@ public class SloReport {
 
     public void setRecentMetrics(List<SliMetric> recentMetrics) {
         this.recentMetrics = recentMetrics;
+    }
+
+    public List<Double> getTrendPoints() {
+        return trendPoints;
+    }
+
+    public void setTrendPoints(List<Double> trendPoints) {
+        this.trendPoints = trendPoints;
     }
 }

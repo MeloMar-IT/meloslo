@@ -20,9 +20,14 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.TreeMap;
+import java.util.stream.Collectors;
 
 @Service
 public class OpenSloService {
@@ -315,7 +320,79 @@ public class OpenSloService {
 
         List<SliMetric> recentMetrics = allMetrics.size() > 50 ? allMetrics.subList(0, 50) : allMetrics;
 
-        return new SloReport(slo.getName(), target, currentSloValue, errorBudget, status, recentMetrics);
+        // Calculate 30-day trend
+        List<Double> trendPoints = calculateTrendPoints(allMetrics, target, 30);
+
+        return new SloReport(slo.getName(), target, currentSloValue, errorBudget, status, recentMetrics, trendPoints);
+    }
+
+    private List<Double> calculateTrendPoints(List<SliMetric> metrics, double target, int futureDays) {
+        if (metrics.isEmpty()) return new ArrayList<>();
+
+        // 1. Group by day and calculate daily average for the last 30 days
+        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime past30Days = now.minusDays(30);
+
+        // Group by LocalDate and calculate average SLI per day
+        Map<java.time.LocalDate, Double> dailySli = metrics.stream()
+                .filter(m -> m.getTimestamp() != null && m.getTimestamp().isAfter(past30Days))
+                .collect(java.util.stream.Collectors.groupingBy(
+                        m -> m.getTimestamp().toLocalDate(),
+                        java.util.TreeMap::new,
+                        java.util.stream.Collectors.averagingDouble(SliMetric::getValue)
+                ));
+
+        if (dailySli.size() < 2) return new ArrayList<>();
+
+        // 2. Convert to Error Budget points and prepare for regression
+        List<java.time.LocalDate> dates = new ArrayList<>(dailySli.keySet());
+        List<Double> y = new ArrayList<>();
+        for (java.time.LocalDate date : dates) {
+            double sli = dailySli.get(date);
+            double eb = (1.0 - target > 0) ? (sli - target) / (1.0 - target) * 100 : 100.0;
+            y.add(eb);
+        }
+
+        // 3. Meta Prophet-inspired Additive Model: y(t) = g(t) + s(t)
+        // g(t): Linear Trend
+        int n = y.size();
+        double sumX = 0, sumY = 0, sumXY = 0, sumXX = 0;
+        for (int i = 0; i < n; i++) {
+            sumX += i;
+            sumY += y.get(i);
+            sumXY += i * y.get(i);
+            sumXX += (double) i * i;
+        }
+        double slope = (n * sumXY - sumX * sumY) / (n * sumXX - sumX * sumX);
+        double intercept = (sumY - slope * sumX) / n;
+
+        // s(t): Weekly Seasonality (averaging residuals by day of week)
+        double[] seasonality = new double[7]; // 0=Mon, 6=Sun
+        int[] counts = new int[7];
+        for (int i = 0; i < n; i++) {
+            double trendValue = intercept + slope * i;
+            double residual = y.get(i) - trendValue;
+            int dayOfWeek = dates.get(i).getDayOfWeek().getValue() - 1;
+            seasonality[dayOfWeek] += residual;
+            counts[dayOfWeek]++;
+        }
+        for (int i = 0; i < 7; i++) {
+            if (counts[i] > 0) seasonality[i] /= counts[i];
+        }
+
+        // 4. Project future days: y_hat = g(t) + s(t)
+        List<Double> projection = new ArrayList<>();
+        java.time.LocalDate lastDate = dates.get(n - 1);
+        for (int i = 1; i <= futureDays; i++) {
+            java.time.LocalDate forecastDate = lastDate.plusDays(i);
+            double trendValue = intercept + slope * (n - 1 + i);
+            int dayOfWeek = forecastDate.getDayOfWeek().getValue() - 1;
+            double seasonalValue = seasonality[dayOfWeek];
+            
+            projection.add(trendValue + seasonalValue);
+        }
+
+        return projection;
     }
 
     public BusinessServiceReport getServiceReport(Long id) {
