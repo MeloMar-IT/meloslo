@@ -105,14 +105,14 @@ class MetricFetchSchedulerTest {
         slo.setKind("SLO");
         slo.setName("test-slo");
         
-        when(openSloRepository.findByKind("SLO")).thenReturn(List.of(slo));
+        when(openSloRepository.findByKindWithSlis("SLO")).thenReturn(List.of(slo));
         when(openSloRepository.findByKind("DataSource")).thenReturn(Collections.emptyList());
 
         // Act
         scheduler.fetchMetrics();
 
         // Assert
-        verify(openSloService).populateTransientFields(slo);
+        verify(openSloService).populateTransientFieldsForList(anyList());
         verify(alertingService).sendAlertIfNeeded(slo);
     }
 

@@ -11,4 +11,7 @@ import java.util.Optional;
 public interface OpenSloRepository extends JpaRepository<OpenSlo, Long> {
     Optional<OpenSlo> findByName(String name);
     List<OpenSlo> findByKind(String kind);
+
+    @org.springframework.data.jpa.repository.Query("SELECT o FROM OpenSlo o LEFT JOIN FETCH o.slis WHERE o.kind = :kind")
+    List<OpenSlo> findByKindWithSlis(String kind);
 }

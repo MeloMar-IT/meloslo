@@ -53,9 +53,9 @@ public class MetricFetchScheduler {
         LocalDateTime now = LocalDateTime.now();
 
         log.info("Checking for SLO breaches...");
-        List<OpenSlo> allSlos = openSloRepository.findByKind("SLO");
+        List<OpenSlo> allSlos = openSloRepository.findByKindWithSlis("SLO");
+        openSloService.populateTransientFieldsForList(allSlos);
         for (OpenSlo slo : allSlos) {
-            openSloService.populateTransientFields(slo);
             alertingService.sendAlertIfNeeded(slo);
         }
 
