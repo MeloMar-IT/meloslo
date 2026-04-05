@@ -2,7 +2,7 @@
 
 ## GitFlow Workflow
 
-This repository follows the **GitFlow** branching model. For more details, see [GITFLOW.md](./GITFLOW.md).
+This repository follows the **GitFlow** branching model. For more details, see [GITFLOW.md](docs/GITFLOW.md).
 
 ### Core Branches
 - `main`: Production-ready code.
@@ -11,6 +11,8 @@ This repository follows the **GitFlow** branching model. For more details, see [
 ---
 
 MeloSlo is a Spring Boot application designed to manage OpenSLO records. It provides a professional interface to create, read, update, and delete Services, SLIs, and SLOs.
+
+For a detailed step-by-step guide with screenshots, see the [User Guide](docs/USER_GUIDE.md).
 
 ## What are OpenSLO Records?
 
@@ -24,6 +26,8 @@ OpenSLO is an open-source specification for defining Service Level Objectives (S
 4.  **Error Budget**: The amount of service unreliability that is allowed before the SLO is violated.
 
 ## How to use this Application
+
+For a comprehensive guide on how to use MeloSlo, including visual walkthroughs, please refer to our [User Guide](docs/USER_GUIDE.md).
 
 ### Navigation
 
