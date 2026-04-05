@@ -1,77 +1,58 @@
-# GitFlow Workflow
+# GitFlow Documentation
 
-This repository follows the **GitFlow** branching model, a strict and structured approach designed for scheduled releases.
+## Branch Structure
 
-## Core Branches
+The GitFlow branching model consists of the following types of branches:
 
-### `main`
-- **Purpose**: Production-ready code.
-- **Status**: Always stable and reflects the latest released version.
-- **Deployment**: Any push/merge to `main` should trigger a production deployment.
+1. **Main Branch**
+   - `main`: This is the production-ready state of the project.
 
-### `develop`
-- **Purpose**: Integration branch for features.
-- **Status**: Latest delivered development changes for the next release.
-- **Base Branch**: Created from `main`.
+2. **Develop Branch**
+   - `develop`: This branch acts as an integration branch for features.
 
-## Supporting Branches
+3. **Feature Branches**
+   - Naming convention: `feature/<feature-name>`
+   - These branches are used to develop new features for the upcoming or a distant future release.
+   - They should branch off from `develop`.
 
-### Feature Branches (`feature/*`)
-- **Purpose**: Developing new features.
-- **Base Branch**: `develop`.
-- **Merge To**: `develop`.
-- **Naming Convention**: `feature/short-description` (e.g., `feature/user-auth`).
+4. **Release Branches**
+   - Naming convention: `release/<version-number>`
+   - These branches are created to prepare new production releases. Once they are ready, they are merged into `main` and `develop`.
 
-### Release Branches (`release/*`)
-- **Purpose**: Preparing for a new production release.
-- **Base Branch**: `develop`.
-- **Merge To**: `main` AND `develop`.
-- **Naming Convention**: `release/vX.Y.Z` (e.g., `release/v1.0.0`).
-- **Activities**: Bug fixes for the release, documentation updates.
+5. **Hotfix Branches**
+   - Naming convention: `hotfix/<issue-description>`
+   - These branches are meant to quickly patch bugs in production releases. They branch off from `main` and must be merged back into both `main` and `develop` once finished.
 
-### Hotfix Branches (`hotfix/*`)
-- **Purpose**: Quickly fixing critical bugs in production.
-- **Base Branch**: `main`.
-- **Merge To**: `main` AND `develop`.
-- **Naming Convention**: `hotfix/vX.Y.Z` (e.g., `hotfix/v1.0.1`).
+## Naming Conventions
 
-## Workflow Steps
+- Use lowercase with hyphens to separate words.
+- Be descriptive of the work being done:
+   - Features: `feature/new-login-system`
+   - Releases: `release/1.0.0`
+   - Hotfixes: `hotfix/fix-crash-on-launch`
 
-### 1. Starting a New Feature
-```bash
-git checkout develop
-git pull origin develop
-git checkout -b feature/my-new-feature
-```
+## Workflow Procedures
 
-### 2. Finishing a Feature
-- Create a Pull Request (PR) from `feature/my-new-feature` to `develop`.
-- Once reviewed and merged:
-```bash
-git checkout develop
-git pull origin develop
-git branch -d feature/my-new-feature
-```
+1. **Starting a Feature**
+   - Create a new feature branch from the `develop` branch.
+   - Once the feature is complete, submit a pull request to merge into `develop`.
 
-### 3. Creating a Release
-- When `develop` has reached the desired state for a release:
-```bash
-git checkout develop
-git checkout -b release/v1.0.0
-```
-- Perform final bug fixes on this branch.
+2. **Preparing a Release**
+   - When it's time for a release, create a release branch from `develop`.
+   - Finalize the release on this branch, and when complete, merge both into `main` and `develop`.
 
-### 4. Finishing a Release
-- Merge `release/v1.0.0` into `main` (and tag it).
-- Merge `release/v1.0.0` back into `develop` to ensure it has any fixes made.
+3. **Fixing Bugs (Hotfixes)**
+   - If a bug is found in production, create a hotfix branch from `main`.
+   - After fixing the bug, merge the branch back into both `main` and `develop`.
 
-### 5. Creating a Hotfix
-- When a bug is found in `main`:
-```bash
-git checkout main
-git checkout -b hotfix/urgent-fix
-```
+## Best Practices
 
-### 6. Finishing a Hotfix
-- Merge `hotfix/urgent-fix` into `main` (and tag it).
-- Merge `hotfix/urgent-fix` into `develop`.
+- Always pull the latest changes from `develop` before starting a new feature.
+- Write clean, concise commit messages and ensure all commits are related to the feature.
+- Regularly review and clean up merged branches to keep the repository organized.
+- Ensure thorough testing before merging into `main`.
+- Use semantic versioning for releases to clearly convey the state of the software.
+
+## Conclusion
+
+Following GitFlow helps maintain a clean and organized repository while facilitating collaboration among team members. It provides a clear process for developing, releasing, and fixing projects in a structured manner.
