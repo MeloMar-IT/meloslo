@@ -18,6 +18,7 @@ import org.jfree.chart.renderer.xy.XYDifferenceRenderer;
 import org.jfree.data.time.Second;
 import org.jfree.data.time.TimeSeries;
 import org.jfree.data.time.TimeSeriesCollection;
+import org.jfree.chart.ui.RectangleEdge;
 import org.springframework.stereotype.Service;
 
 import java.awt.Color;
@@ -310,6 +311,10 @@ public class ReportService {
         
         DateAxis axis = (DateAxis) plot.getDomainAxis();
         axis.setDateFormatOverride(new java.text.SimpleDateFormat("MMM yyyy"));
+
+        if (chart.getLegend() != null) {
+            chart.getLegend().setPosition(RectangleEdge.BOTTOM);
+        }
 
         BufferedImage bufferedImage = chart.createBufferedImage(800, 400);
         try {

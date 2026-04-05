@@ -323,7 +323,35 @@ public class OpenSloService {
         // Calculate 30-day trend
         List<Double> trendPoints = calculateTrendPoints(allMetrics, target, 30);
 
-        return new SloReport(slo.getName(), target, currentSloValue, errorBudget, status, recentMetrics, trendPoints);
+        // Calculate 30-day historical SLO values
+        List<Double> historicalSloValues = calculateHistoricalSloValues(allMetrics, 30);
+
+        return new SloReport(slo.getName(), target, currentSloValue, errorBudget, status, recentMetrics, trendPoints, historicalSloValues);
+    }
+
+    private List<Double> calculateHistoricalSloValues(List<SliMetric> metrics, int days) {
+        if (metrics.isEmpty()) return new ArrayList<>();
+
+        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime startDate = now.minusDays(days);
+
+        // Group by day and calculate average SLI per day
+        Map<java.time.LocalDate, Double> dailySli = metrics.stream()
+                .filter(m -> m.getTimestamp() != null && m.getTimestamp().isAfter(startDate))
+                .collect(java.util.stream.Collectors.groupingBy(
+                        m -> m.getTimestamp().toLocalDate(),
+                        java.util.TreeMap::new,
+                        java.util.stream.Collectors.averagingDouble(SliMetric::getValue)
+                ));
+
+        List<Double> results = new ArrayList<>();
+        // Fill in gaps and ensure we have exactly 'days' points if possible
+        for (int i = days - 1; i >= 0; i--) {
+            java.time.LocalDate date = now.minusDays(i).toLocalDate();
+            results.add(dailySli.getOrDefault(date, 1.0) * 100.0);
+        }
+
+        return results;
     }
 
     private List<Double> calculateTrendPoints(List<SliMetric> metrics, double target, int futureDays) {
