@@ -354,7 +354,7 @@ public class OpenSloService {
         return results;
     }
 
-    private List<Double> calculateTrendPoints(List<SliMetric> metrics, double target, int futureDays) {
+    public List<Double> calculateTrendPoints(List<SliMetric> metrics, double target, int futureDays) {
         if (metrics.isEmpty()) return new ArrayList<>();
 
         // 1. Group by day and calculate daily average for the last 30 days
