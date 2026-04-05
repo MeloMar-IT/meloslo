@@ -18,7 +18,7 @@ OpenSLO is an open-source specification for defining Service Level Objectives (S
 
 ### Core Concepts
 
-1.  **Service**: A logical collection of SLOs. It represents a system or component.
+1.  **Business Service**: A logical collection of SLOs. It represents a system or component.
 2.  **SLI (Service Level Indicator)**: A metric that measures some aspect of the service (e.g., latency, availability). **Important**: All SLI metric values must be in the range of **0 to 100**.
 3.  **SLO (Service Level Objective)**: A target value or range of values for an SLI that defines the expected level of service.
 4.  **Error Budget**: The amount of service unreliability that is allowed before the SLO is violated.

@@ -110,7 +110,7 @@ public class ReportService {
         document.add(new Paragraph("Department: " + record.getDepartment() + " | Manager: " + record.getManager(), normalFont));
         document.add(new Chunk("\n"));
 
-        if ("Service".equalsIgnoreCase(record.getKind())) {
+        if ("BusinessService".equalsIgnoreCase(record.getKind())) {
             List<OpenSlo> slos = record.getSlos();
             if (slos == null || slos.isEmpty()) {
                 document.add(new Paragraph("No SLOs associated with this service.", normalFont));
@@ -126,7 +126,7 @@ public class ReportService {
                 }
 
                 // Always show if the user wants 0s for missing data
-                document.add(new Paragraph("Service Performance Aggregation (1 Year)", boldFont));
+                document.add(new Paragraph("Business Service Performance Aggregation (1 Year)", boldFont));
                 Map<LocalDateTime, Double> aggregatedData = getAggregatedDataWithZeros(allServiceMetrics, since, now, ChronoUnit.DAYS);
                 
                 double totalTarget = 0;

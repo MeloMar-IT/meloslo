@@ -1,6 +1,6 @@
 # MeloSlo User Guide
 
-Welcome to the **MeloSlo** user guide. MeloSlo is a comprehensive platform designed for managing OpenSLO records (Services, SLIs, and SLOs) through a professional interface. This guide will walk you through the key features and workflows of the application.
+Welcome to the **MeloSlo** user guide. MeloSlo is a comprehensive platform designed for managing OpenSLO records (Business Services, SLIs, and SLOs) through a professional interface. This guide will walk you through the key features and workflows of the application.
 
 ---
 
@@ -24,7 +24,7 @@ After logging in, you are presented with the **Dashboard**, which provides a hig
 ![Dashboard Overview](Screenshots/Screenshot%202026-04-05%20at%2011.24.21.png)
 
 The Dashboard shows:
-- **Total Services**: The count of all logical collections of SLOs.
+- **Total Business Services**: The count of all logical collections of SLOs.
 - **Total SLOs**: The total number of objectives being tracked.
 - **Healthy/Warning/Breaching**: Real-time status indicators based on error budget consumption.
 
@@ -32,8 +32,8 @@ The Dashboard shows:
 
 ## 3. Managing OpenSLO Records
 
-### 3.1 Services
-The **Services** view allows you to manage logical collections of SLOs that represent your systems or components.
+### 3.1 Business Services
+The **Business Services** view allows you to manage logical collections of SLOs that represent your systems or components.
 
 ![Services View](Screenshots/Screenshot%202026-04-05%20at%2011.25.01.png)
 

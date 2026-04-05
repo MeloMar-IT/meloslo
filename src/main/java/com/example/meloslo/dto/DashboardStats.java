@@ -1,7 +1,7 @@
 package com.example.meloslo.dto;
 
 public class DashboardStats {
-    private long totalServices;
+    private long totalBusinessServices;
     private long totalSlos;
     private long healthySlos;
     private long warningSlos;
@@ -10,19 +10,19 @@ public class DashboardStats {
     public DashboardStats() {}
 
     public DashboardStats(long totalServices, long totalSlos, long healthySlos, long warningSlos, long breachingSlos) {
-        this.totalServices = totalServices;
+        this.totalBusinessServices = totalServices;
         this.totalSlos = totalSlos;
         this.healthySlos = healthySlos;
         this.warningSlos = warningSlos;
         this.breachingSlos = breachingSlos;
     }
 
-    public long getTotalServices() {
-        return totalServices;
+    public long getTotalBusinessServices() {
+        return totalBusinessServices;
     }
 
-    public void setTotalServices(long totalServices) {
-        this.totalServices = totalServices;
+    public void setTotalBusinessServices(long totalServices) {
+        this.totalBusinessServices = totalServices;
     }
 
     public long getTotalSlos() {

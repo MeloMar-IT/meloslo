@@ -1,7 +1,7 @@
 package com.example.meloslo.controller;
 
 import com.example.meloslo.dto.DashboardStats;
-import com.example.meloslo.dto.ServiceReport;
+import com.example.meloslo.dto.BusinessServiceReport;
 import com.example.meloslo.dto.SliReport;
 import com.example.meloslo.dto.SloReport;
 import com.example.meloslo.model.OpenSlo;
@@ -55,7 +55,7 @@ public class OpenSloController {
     }
 
     @GetMapping("/{id}/service-report")
-    public ResponseEntity<ServiceReport> getServiceReport(@PathVariable Long id) {
+    public ResponseEntity<BusinessServiceReport> getServiceReport(@PathVariable Long id) {
         try {
             return ResponseEntity.ok(service.getServiceReport(id));
         } catch (RuntimeException e) {
