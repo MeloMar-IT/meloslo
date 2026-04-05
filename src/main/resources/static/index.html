@@ -2476,18 +2476,65 @@ spec:
                     if (!chartContainer) return;
                     chartContainer.innerHTML = '';
 
-                    let seriesData = [100, 98, 97, 95, 94, 93, 91, 88, 85, 82, 80, 78, 75, 74];
-                    let categories = Array.from({length: 14}, (_, i) => `Day ${i+1}`);
-                    let seriesName = 'Remaining Budget';
+                    let series = [];
+                    let categories = [];
                     let targetValue = null;
 
                     if (report && report.recentMetrics && report.recentMetrics.length > 0) {
-                        seriesData = report.recentMetrics.map(m => (m.value * 100).toFixed(2)).reverse();
-                        categories = report.recentMetrics.map(m => new Date(m.timestamp).toLocaleDateString()).reverse();
-                        seriesName = 'SLI Value (%)';
-                        if (report.target !== undefined && report.target !== null) {
-                            targetValue = report.target * 100;
+                        const sliValues = report.recentMetrics.map(m => (m.value * 100).toFixed(2)).reverse();
+                        const timestamps = report.recentMetrics.map(m => new Date(m.timestamp).toLocaleDateString()).reverse();
+                        
+                        // Calculate error budget points for the main series if it's an SLO chart
+                        if (selector === '#chart' && report.target !== undefined) {
+                            const target = report.target;
+                            const ebValues = report.recentMetrics.map(m => {
+                                const eb = (1.0 - target > 0) ? (m.value - target) / (1.0 - target) * 100 : 100.0;
+                                return eb.toFixed(2);
+                            }).reverse();
+                            
+                            series.push({
+                                name: 'Error Budget (%)',
+                                data: ebValues
+                            });
+                            categories = timestamps;
+                            targetValue = 0; // Error budget target is 0% remaining (breach)
+
+                            // Add Trend Analysis if available (only for SLO chart)
+                            if (report.trendPoints && report.trendPoints.length > 0) {
+                                const trendData = new Array(ebValues.length - 1).fill(null);
+                                trendData.push(ebValues[ebValues.length - 1]); // Connect trend to last real point
+                                report.trendPoints.forEach(p => trendData.push(p.toFixed(2)));
+                                
+                                series.push({
+                                    name: '30-Day Trend',
+                                    data: trendData
+                                });
+                                
+                                // Extend categories for trend
+                                const lastDate = new Date(report.recentMetrics[0].timestamp);
+                                for (let i = 1; i <= report.trendPoints.length; i++) {
+                                    const nextDate = new Date(lastDate);
+                                    nextDate.setDate(lastDate.getDate() + i);
+                                    categories.push(nextDate.toLocaleDateString());
+                                }
+                            }
+                        } else {
+                            series.push({
+                                name: 'SLI Value (%)',
+                                data: sliValues
+                            });
+                            categories = timestamps;
+                            if (report.target !== undefined && report.target !== null) {
+                                targetValue = report.target * 100;
+                            }
                         }
+                    } else {
+                        // Fallback data
+                        series = [{
+                            name: 'Remaining Budget',
+                            data: [100, 98, 97, 95, 94, 93, 91, 88, 85, 82, 80, 78, 75, 74]
+                        }];
+                        categories = Array.from({length: 14}, (_, i) => `Day ${i+1}`);
                     }
 
                     let fillConfig = {
@@ -2502,20 +2549,6 @@ spec:
                     let annotations = {};
 
                     if (targetValue !== null) {
-                        const targetOffset = Math.max(0, Math.min(100, 100 - targetValue));
-                        fillConfig = {
-                            type: 'gradient',
-                            gradient: {
-                                shadeIntensity: 1,
-                                type: 'vertical',
-                                colorStops: [
-                                    { offset: 0, color: '#10b981', opacity: 0.5 },
-                                    { offset: targetOffset, color: '#10b981', opacity: 0.5 },
-                                    { offset: targetOffset, color: '#ef4444', opacity: 0.5 },
-                                    { offset: 100, color: '#ef4444', opacity: 0.5 }
-                                ]
-                            }
-                        };
                         annotations = {
                             yaxis: [{
                                 y: targetValue,
@@ -2523,43 +2556,54 @@ spec:
                                 label: {
                                     borderColor: '#10b981',
                                     style: { color: '#fff', background: '#10b981' },
-                                    text: `Target ${targetValue.toFixed(2)}%`
+                                    text: selector === '#chart' ? 'Breach Threshold' : `Target ${targetValue.toFixed(2)}%`
                                 }
                             }]
                         };
                     }
 
                     const options = {
-                        series: [{
-                            name: seriesName,
-                            data: seriesData
-                        }],
+                        series: series,
                         chart: {
                             type: 'area',
                             height: 300,
-                            toolbar: { show: false },
-                            zoom: { enabled: false }
+                            toolbar: { show: true },
+                            zoom: { enabled: true }
                         },
                         dataLabels: { enabled: false },
-                        stroke: { curve: 'smooth', width: 2 },
-                        colors: targetValue !== null ? ['#10b981'] : ['#3b82f6'],
-                        fill: fillConfig,
+                        stroke: { 
+                            curve: 'smooth', 
+                            width: [3, 2],
+                            dashArray: [0, 5] // Trend line is dashed
+                        },
+                        colors: ['#3b82f6', '#f59e0b'],
+                        fill: {
+                            type: 'solid',
+                            opacity: [0.35, 0] // No fill for trend line
+                        },
                         annotations: annotations,
                         xaxis: {
                             categories: categories,
-                            labels: { show: categories.length <= 10 },
+                            labels: { 
+                                show: true,
+                                rotate: -45,
+                                style: { fontSize: '10px' }
+                            },
                             axisBorder: { show: false },
-                            axisTicks: { show: false }
+                            axisTicks: { show: false },
+                            tickAmount: 10
                         },
                         yaxis: {
-                            min: 0,
-                            max: 100,
                             labels: {
-                                formatter: (val) => parseFloat(val).toFixed(2) + '%'
+                                formatter: (val) => val !== null ? parseFloat(val).toFixed(2) + '%' : ''
                             }
                         },
                         grid: {
                             borderColor: '#f1f5f9'
+                        },
+                        legend: {
+                            position: 'top',
+                            horizontalAlign: 'right'
                         }
                     };
 
