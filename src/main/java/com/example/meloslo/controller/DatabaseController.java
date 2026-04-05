@@ -28,9 +28,16 @@ public class DatabaseController {
             throw new IllegalArgumentException("SQL query cannot be empty");
         }
         
-        // Basic security check: only allow SELECT for the web query page
-        if (!sql.trim().toUpperCase().startsWith("SELECT")) {
+        String cleanSql = sql.trim().toUpperCase();
+        
+        // Block dangerous keywords even within strings to be safe (very basic)
+        if (cleanSql.contains("DELETE") || cleanSql.contains("DROP") || cleanSql.contains("UPDATE") || 
+            cleanSql.contains("INSERT") || cleanSql.contains("TRUNCATE") || cleanSql.contains("ALTER")) {
              throw new IllegalArgumentException("Only SELECT queries are allowed for security reasons.");
+        }
+
+        if (!cleanSql.startsWith("SELECT")) {
+             throw new IllegalArgumentException("Only SELECT queries are allowed.");
         }
 
         return jdbcTemplate.queryForList(sql);
