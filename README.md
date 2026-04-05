@@ -38,7 +38,10 @@ The application features a sidebar with the following views:
 - **Query Tool**: Execute raw SQL queries against the database (Administrator only). Use this tool to inspect table structures (`api/v1/database/tables`) and verify raw data records across `OPEN_SLO`, `SLI_METRIC`, and `USER` tables. Only `SELECT` queries are permitted for security.
 - **User Admin**: Manage user accounts and permissions (Administrator only).
 - **Reports**: Generate annual performance reports for Services and SLOs in PDF format, including performance graphs for the last year. Reports are compliance-aware and automatically handle data gaps by visualizing them as zero-performance periods.
+- **Trend Analysis**: Predictive modeling for SLOs to forecast error budget depletion using linear regression and weekly seasonality.
+- **Thread Management**: Automated background processing for metric collection and alerting using a managed `TaskManagementService`. It includes a watchdog mechanism to automatically terminate long-running or stalled threads (max 5 minutes) to ensure system stability.
 - **Logout**: Securely end your current session.
+- **Testing**: Detailed information about our testing strategy can be found in [Docs/test.md](Docs/test.md).
 
 ### Authentication and User Management
 
@@ -94,6 +97,8 @@ MeloSlo includes an automated scheduler that periodically "fetches" metrics from
 
 - **Refresh Rate**: Each `DataSource` can be configured with a refresh rate (minimum 15 minutes, default 60 minutes).
 - **Automated Collection**: The background scheduler checks each DataSource and, if the refresh interval has passed, it creates new `SliMetric` records for all SLIs linked to that DataSource.
+- **Thread Management**: To ensure the main application remains responsive, all metric fetching and alerting tasks are executed asynchronously in separate threads managed by the `TaskManagementService`.
+- **Task Watchdog**: To prevent resource exhaustion, the system includes a watchdog that automatically identifies and cancels any background task that has been running for more than 5 minutes.
 - **Error Handling**: If a metric cannot be retrieved (simulated in this version), the value is automatically set to `0.0` to reflect a failure in the indicator.
 - **Last Sync**: The application tracks and displays the last time each DataSource was successfully refreshed.
 

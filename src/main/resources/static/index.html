@@ -862,6 +862,7 @@
                                         <li><strong>Data Source:</strong> A record defining where metrics come from (e.g. Prometheus). Supports custom <strong>Refresh Rates</strong> (min 15m).</li>
                                         <li><strong>Error Budget:</strong> The amount of unreliability you can afford before violating your SLO.</li>
                                         <li><strong>Alerting Source:</strong> A record defining a webhook (e.g. Slack) to notify when an SLO is breached. Includes variables like <code>${SLO_NAME}</code> and 6h anti-spam.</li>
+                                        <li><strong>Background Processing:</strong> All heavy tasks (fetching metrics, sending alerts) run in background threads with a 5-minute timeout watchdog for stability.</li>
                                         <li><strong>Status Thresholds:</strong> SLOs are <strong>Healthy</strong> (Budget &ge; 25%), <strong>Warning</strong> (0% to 25%), or <strong>Breaching</strong> (&lt; 0%).</li>
                                     </ul>
                                 </div>
@@ -933,12 +934,20 @@
                                         <p class="text-sm text-slate-600">Go to the 'Reports' view to generate professional annual PDF performance reports for your Services and SLOs. Gaps in data are automatically handled.</p>
                                     </div>
                                     <div>
-                                        <h4 class="font-bold text-slate-800 mb-1">6. Configure Alerting</h4>
+                                        <h4 class="font-bold text-slate-800 mb-1">6. Trend Prediction</h4>
+                                        <p class="text-sm text-slate-600">MeloSlo includes an advanced trend prediction engine that uses additive modeling (linear trend + seasonality) to forecast future error budget consumption based on historical data. Look for the 'Trend Analysis' section in SLO details.</p>
+                                    </div>
+                                    <div>
+                                        <h4 class="font-bold text-slate-800 mb-1">7. Configure Alerting</h4>
                                         <p class="text-sm text-slate-600">Create an 'Alerting Source' with your webhook URL and JSON payload. Then link it to your SLOs to get notified when they are breaching. Use <code>${SLO_NAME}</code>, <code>${SLO_STATUS}</code>, and <code>${SLO_VALUE}</code> variables.</p>
                                     </div>
                                     <div>
-                                        <h4 class="font-bold text-slate-800 mb-1">7. Database Maintenance</h4>
+                                        <h4 class="font-bold text-slate-800 mb-1">8. Database Maintenance</h4>
                                         <p class="text-sm text-slate-600">Administrators can use the 'Query Tool' to run <code>SELECT</code> queries against the internal database to audit records or inspect table structures.</p>
+                                    </div>
+                                    <div>
+                                        <h4 class="font-bold text-slate-800 mb-1">9. Thread Stability</h4>
+                                        <p class="text-sm text-slate-600">MeloSlo uses a background thread pool for all non-blocking operations. A built-in watchdog ensures that no single task (like a slow metric fetch) consumes resources for more than 5 minutes.</p>
                                     </div>
                                 </div>
                             </section>
