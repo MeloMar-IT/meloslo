@@ -20,6 +20,56 @@ public class SecurityIntegrationTest {
     @Autowired
     private MockMvc mockMvc;
 
+    @Autowired
+    private com.example.meloslo.repository.UserRepository userRepository;
+
+    @Autowired
+    private com.example.meloslo.repository.OpenSloRepository openSloRepository;
+
+    @Autowired
+    private org.springframework.security.crypto.password.PasswordEncoder passwordEncoder;
+
+    @org.junit.jupiter.api.BeforeEach
+    void setup() {
+        // Ensure test users exist
+        if (userRepository.findByUsername("admin").isEmpty()) {
+            userRepository.save(new com.example.meloslo.model.User("admin", passwordEncoder.encode("admin"), "admin@meloslo.com", null));
+        }
+        if (userRepository.findByUsername("testuser").isEmpty()) {
+            userRepository.save(new com.example.meloslo.model.User("testuser", passwordEncoder.encode("testuser"), "testuser@finance.com", "Finance,Engineering"));
+        }
+
+        // Ensure enough SLOs exist for the tests (admin expects >= 4, testuser expects 4)
+        long sloCount = openSloRepository.count();
+        if (sloCount < 4) {
+            for (int i = 0; i < 5; i++) {
+                String name = "test-slo-" + i;
+                if (openSloRepository.findByName(name).isEmpty()) {
+                    com.example.meloslo.model.OpenSlo slo = new com.example.meloslo.model.OpenSlo("openslo/v1", "SLO", name, "SLO " + i, "{}");
+                    if (i < 4) {
+                        // testuser sees Finance and Engineering
+                        slo.setDepartment(i % 2 == 0 ? "Finance" : "Engineering");
+                    } else {
+                        slo.setDepartment("Other");
+                    }
+                    openSloRepository.save(slo);
+                }
+            }
+        }
+        
+        // Ensure enough SLIs exist for testuser (expects 3)
+        if (openSloRepository.findByKind("SLI").size() < 3) {
+            for (int i = 0; i < 3; i++) {
+                String name = "test-sli-" + i;
+                if (openSloRepository.findByName(name).isEmpty()) {
+                    com.example.meloslo.model.OpenSlo sli = new com.example.meloslo.model.OpenSlo("openslo/v1", "SLI", name, "SLI " + i, "{}");
+                    sli.setDepartment("Finance");
+                    openSloRepository.save(sli);
+                }
+            }
+        }
+    }
+
     @Test
     void shouldMaintainSessionAfterLogin() throws Exception {
         MockHttpSession session = new MockHttpSession();
@@ -61,7 +111,6 @@ public class SecurityIntegrationTest {
     @Test
     void testUserShouldNotHaveAdminRole() throws Exception {
         MockHttpSession session = new MockHttpSession();
-
         // 1. Login as testuser
         mockMvc.perform(post("/api/login")
                 .session(session)
@@ -79,7 +128,6 @@ public class SecurityIntegrationTest {
     @Test
     void adminUserShouldSeeAllRecords() throws Exception {
         MockHttpSession session = new MockHttpSession();
-
         // 1. Login as admin
         mockMvc.perform(post("/api/login")
                 .session(session)
@@ -88,7 +136,7 @@ public class SecurityIntegrationTest {
                 .param("password", "admin"))
                 .andExpect(status().isOk());
 
-        // 2. Access all SLOs - should see all of them (at least 4 from DataInitializer)
+        // 2. Access all SLOs as admin
         mockMvc.perform(get("/api/v1/openslo?kind=SLO")
                 .session(session))
                 .andExpect(status().isOk())
@@ -98,8 +146,7 @@ public class SecurityIntegrationTest {
     @Test
     void testUserShouldOnlySeeDepartmentRecords() throws Exception {
         MockHttpSession session = new MockHttpSession();
-
-        // 1. Login as testuser (Finance, Engineering)
+        // 1. Login as testuser
         mockMvc.perform(post("/api/login")
                 .session(session)
                 .contentType(MediaType.APPLICATION_FORM_URLENCODED)
@@ -107,30 +154,13 @@ public class SecurityIntegrationTest {
                 .param("password", "testuser"))
                 .andExpect(status().isOk());
 
-        // 2. Access all SLOs - should only see those in Finance or Engineering
-        // In DataInitializer:
-        // Finance: web-latency, api-availability, db-errors (db-errors is linked to error-sli which is Infrastructure, 
-        // but db-errors SLO itself is Finance because it's linked to paymentService which is Finance)
-        // Engineering: eng-latency-slo
-        // Total should be 4
+        // 2. Access all SLOs as testuser (Finance, Engineering)
         mockMvc.perform(get("/api/v1/openslo?kind=SLO")
                 .session(session))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.length()").value(4));
         
-        // 3. Check specific non-accessible record (Infrastructure department)
-        // The error-sli itself is Infrastructure, let's check SLIs
-        mockMvc.perform(get("/api/v1/openslo?kind=SLI")
-                .session(session))
-                .andExpect(status().isOk());
-        // testuser has Finance,Engineering. 
-        // DataInitializer SLIs:
-        // latency-sli: Finance
-        // availability-sli: Finance
-        // error-sli: Infrastructure
-        // eng-latency-sli: Engineering
-        // multi-source-sli: Infrastructure
-        // testuser should see: latency-sli, availability-sli, eng-latency-sli (Total 3)
+        // 3. Access all SLIs as testuser
         mockMvc.perform(get("/api/v1/openslo?kind=SLI")
                 .session(session))
                 .andExpect(status().isOk())
