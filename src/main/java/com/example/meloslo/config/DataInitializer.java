@@ -70,7 +70,7 @@ public class DataInitializer {
 
                 if (!needsInitialization) {
                     // 3. Check if SLOs are correctly connected to Service and SLIs
-                    List<OpenSlo> allSlos = repository.findByKind("SLO");
+                    List<OpenSlo> allSlos = repository.findByKindWithSlis("SLO");
                     for (OpenSlo slo : allSlos) {
                         if (slo.getService() == null || slo.getSlis() == null || slo.getSlis().isEmpty()) {
                             log.warn("SLO '{}' is not correctly connected to Service or SLIs.", slo.getName());
@@ -99,8 +99,20 @@ public class DataInitializer {
     }
 
     private void reloadDatabase(OpenSloRepository repository, MetricRepository metricRepository, UserRepository userRepository, PasswordEncoder passwordEncoder) {
-        // Clear existing data
+        // Clear existing data in correct order
         metricRepository.deleteAll();
+        
+        // Clear many-to-many and self-referential associations before deleting
+        List<OpenSlo> allRecords = repository.findByKindWithSlis("SLO");
+        for (OpenSlo record : allRecords) {
+            record.getSlis().clear();
+            record.setService(null);
+            record.setDatasource(null);
+            record.setAlertingSource(null);
+        }
+        repository.saveAll(allRecords);
+        repository.flush();
+        
         repository.deleteAll();
         userRepository.deleteAll();
 

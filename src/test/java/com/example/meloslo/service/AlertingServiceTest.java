@@ -48,6 +48,8 @@ class AlertingServiceTest {
         slo.setAlertingSource(source);
 
         alertingService.sendAlertIfNeeded(slo);
+        
+        when(openSloRepository.findById(1L)).thenReturn(java.util.Optional.of(slo));
 
         ArgumentCaptor<Runnable> runnableCaptor = ArgumentCaptor.forClass(Runnable.class);
         verify(taskManagementService).runAsyncTask(eq("Alert-1"), runnableCaptor.capture());
@@ -103,6 +105,8 @@ class AlertingServiceTest {
 
         alertingService.sendAlertIfNeeded(slo);
 
+        when(openSloRepository.findById(2L)).thenReturn(java.util.Optional.of(slo));
+
         ArgumentCaptor<Runnable> runnableCaptor = ArgumentCaptor.forClass(Runnable.class);
         verify(taskManagementService).runAsyncTask(eq("Alert-2"), runnableCaptor.capture());
         runnableCaptor.getValue().run();
@@ -142,6 +146,8 @@ class AlertingServiceTest {
 
         alertingService.sendAlertIfNeeded(slo);
 
+        when(openSloRepository.findById(3L)).thenReturn(java.util.Optional.of(slo));
+
         ArgumentCaptor<Runnable> runnableCaptor = ArgumentCaptor.forClass(Runnable.class);
         verify(taskManagementService).runAsyncTask(eq("Alert-3"), runnableCaptor.capture());
         runnableCaptor.getValue().run();
@@ -166,6 +172,8 @@ class AlertingServiceTest {
         slo.setAlertingSource(source);
 
         alertingService.sendAlertIfNeeded(slo);
+
+        when(openSloRepository.findById(4L)).thenReturn(java.util.Optional.of(slo));
 
         ArgumentCaptor<Runnable> runnableCaptor = ArgumentCaptor.forClass(Runnable.class);
         verify(taskManagementService).runAsyncTask(eq("Alert-4"), runnableCaptor.capture());
