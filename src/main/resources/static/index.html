@@ -2702,6 +2702,7 @@ spec:
                                 }
                             }
                         } else {
+                            const sliValues = report.recentMetrics ? report.recentMetrics.map(m => (m.value * 100).toFixed(2)).reverse() : [];
                             series.push({
                                 name: 'SLI Value (%)',
                                 data: sliValues

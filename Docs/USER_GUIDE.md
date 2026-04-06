@@ -12,7 +12,7 @@ MeloSlo is an open-source tool provided **"as is" and on your own risk**. The de
 ### 1.1 Authentication
 To access MeloSlo, you must first log in using your credentials. The platform supports role-based access control to ensure that only authorized users can view or manage specific departmental records.
 
-![Login Screen](Screenshots/Screenshot%202026-04-05%20at%2011.23.53.png)
+![Login Screen](Screenshots/Screenshot%202026-04-06%20at%2008.42.34.png)
 
 *   **Default Administrator**: `admin` / `admin`
 *   **Test User**: `testuser` / `testuser`
@@ -59,7 +59,7 @@ java -jar meloslo.jar --spring.config.location=file:/etc/meloslo/custom-applicat
 ### 2.1 The Dashboard
 After logging in, you are presented with the **Dashboard**, which provides a high-level overview of the health of all monitored services and SLOs.
 
-![Dashboard Overview](Screenshots/Screenshot%202026-04-05%20at%2011.24.21.png)
+![Dashboard Overview](Screenshots/Screenshot%202026-04-06%20at%2008.46.22.png)
 
 The Dashboard shows:
 - **Total Business Services**: The count of all logical collections of SLOs.
@@ -73,27 +73,25 @@ The Dashboard shows:
 ### 3.1 Business Services
 The **Business Services** view allows you to manage logical collections of SLOs that represent your systems or components.
 
-![Services View](Screenshots/Screenshot%202026-04-05%20at%2011.25.01.png)
+![Services View](Screenshots/Screenshot%202026-04-06%20at%2008.42.54.png)
 
 ### 3.2 Service Level Indicators (SLIs)
 SLIs define the metrics that measure the performance of your services. All SLI values in MeloSlo are normalized to a range of **0 to 100**.
 
-![SLI Management](Screenshots/Screenshot%202026-04-05%20at%2011.25.09.png)
+![SLI Management](Screenshots/Screenshot%202026-04-06%20at%2008.43.15.png)
 
 ### 3.3 Service Level Objectives (SLOs)
 SLOs define your performance targets. You can view detailed information about each SLO, including its current status and remaining error budget.
 
-![SLO Management](Screenshots/Screenshot%202026-04-05%20at%2011.25.18.png)
+![SLO Management](Screenshots/Screenshot%202026-04-06%20at%2008.43.04.png)
 
 #### 3.3.1 Creating/Editing an SLO
-When creating an SLO, you specify the target, the linked SLI, and the rolling time window.
-
-![Edit SLO](Screenshots/Screenshot%202026-04-05%20at%2011.25.23.png)
+When creating or editing an SLO, you can use the sidebar to navigate and the top right button to initiate the creation process.
 
 #### 3.3.2 SLO Details & Charts
 MeloSlo provides visualization of performance history and error budget consumption for each SLO.
 
-![SLO Details](Screenshots/Screenshot%202026-04-05%20at%2011.25.28.png)
+![SLO Details](Screenshots/Screenshot%202026-04-06%20at%2008.43.10.png)
 
 ---
 
@@ -102,26 +100,28 @@ MeloSlo provides visualization of performance history and error budget consumpti
 ### 4.1 Data Sources
 Manage your external monitoring systems like Prometheus, Datadog, or Elasticsearch.
 
-![Data Sources](Screenshots/Screenshot%202026-04-05%20at%2011.25.32.png)
+![Data Sources](Screenshots/Screenshot%202026-04-06%20at%2008.43.39.png)
 
 #### 4.1.1 Adding a Data Source
 Use pre-defined templates to quickly configure connection details for various providers.
 
-![Add Data Source](Screenshots/Screenshot%202026-04-05%20at%2011.25.37.png)
+![Data Source Details](Screenshots/Screenshot%202026-04-06%20at%2008.43.43.png)
 
 ### 4.2 Alerting Sources
 Configure notification channels like Slack webhooks or PagerDuty to receive alerts when SLOs are breached.
 
-![Alerting Sources](Screenshots/Screenshot%202026-04-05%20at%2011.25.42.png)
+![Alerting Sources](Screenshots/Screenshot%202026-04-06%20at%2008.43.47.png)
 
 ---
 
 ## 5. Analytics & Reporting
 
 ### 5.1 Performance Reports
-Generate professional PDF reports that aggregate performance data over the last year. These reports include compliance-aware graphs and detailed error budget analysis.
+Generate professional PDF reports that aggregate performance data over the last year. These reports include compliance-aware graphs and detailed error budget analysis. You can customize the report content and period.
 
-![Reports Selection](Screenshots/Screenshot%202026-04-05%20at%2011.25.47.png)
+![Report Options](Screenshots/Screenshot%202026-04-06%20at%2008.43.56.png)
+
+![Reports Selection](Screenshots/Screenshot%202026-04-06%20at%2008.43.52.png)
 
 ---
 
@@ -130,24 +130,21 @@ Generate professional PDF reports that aggregate performance data over the last 
 ### 6.1 User Administration
 Administrators can manage user accounts, roles, and departmental access restrictions.
 
-![User Admin](Screenshots/Screenshot%202026-04-05%20at%2011.25.58.png)
+![User Admin](Screenshots/Screenshot%202026-04-06%20at%2008.44.13.png)
 
 ### 6.2 Database Query Tool
 A tool for administrators to execute raw SQL `SELECT` queries for deep inspection of system data.
 
-![Database Query Tool](Screenshots/Screenshot%202026-04-05%20at%2011.26.03.png)
+![Database Query Tool](Screenshots/Screenshot%202026-04-06%20at%2008.44.07.png)
 
-### 6.3 Table Exploration
-Inspect the structure of the internal database tables used by MeloSlo.
-
-![Table Structure](Screenshots/Screenshot%202026-04-05%20at%2011.26.08.png)
+---
 
 ---
 
 ## 7. Documentation & In-App Help
 The platform includes built-in documentation to assist users in understanding OpenSLO concepts and platform features.
 
-![Documentation View](Screenshots/Screenshot%202026-04-05%20at%2011.26.18.png)
+![Documentation View](Screenshots/Screenshot%202026-04-06%20at%2008.44.03.png)
 
 ---
 
