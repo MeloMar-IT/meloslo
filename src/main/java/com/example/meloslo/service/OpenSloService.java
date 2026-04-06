@@ -73,7 +73,7 @@ public class OpenSloService {
         // ROLE_ADMIN check
         boolean isAdmin = auth.getAuthorities().stream().anyMatch(a -> a.getAuthority().equals("ROLE_ADMIN"));
         // Check if username is admin (for tests stability)
-        if (isAdmin || auth.getName().toLowerCase().contains("admin")) {
+        if (isAdmin || auth.getName().equalsIgnoreCase("admin")) {
             return records;
         }
         
