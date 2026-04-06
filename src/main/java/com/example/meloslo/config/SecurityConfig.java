@@ -43,7 +43,7 @@ public class SecurityConfig {
             .csrf(AbstractHttpConfigurer::disable) // Keep disabled for now as it's a stateless-style API
             .authorizeHttpRequests(auth -> {
                 var authRequests = auth
-                    .requestMatchers("/", "/index.html", "/static/**").permitAll();
+                    .requestMatchers("/", "/index.html", "/static/**", "/*.png", "/*.jpg", "/*.jpeg", "/*.gif", "/*.svg", "/*.ico").permitAll();
                 
                 if (h2ConsoleEnabled) {
                     authRequests.requestMatchers("/h2-console/**").permitAll();

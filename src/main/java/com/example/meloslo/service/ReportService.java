@@ -7,8 +7,11 @@ import com.example.meloslo.repository.MetricRepository;
 import com.lowagie.text.*;
 import com.lowagie.text.Font;
 import com.lowagie.text.Image;
+import com.lowagie.text.pdf.PdfContentByte;
+import com.lowagie.text.pdf.PdfGState;
 import com.lowagie.text.pdf.PdfPCell;
 import com.lowagie.text.pdf.PdfPTable;
+import com.lowagie.text.pdf.PdfPageEventHelper;
 import com.lowagie.text.pdf.PdfWriter;
 import org.jfree.chart.ChartFactory;
 import org.jfree.chart.JFreeChart;
@@ -23,11 +26,14 @@ import org.jfree.data.time.Second;
 import org.jfree.data.time.TimeSeries;
 import org.jfree.data.time.TimeSeriesCollection;
 import org.jfree.chart.ui.RectangleEdge;
+import org.springframework.core.io.ClassPathResource;
 import org.springframework.stereotype.Service;
 
 import java.awt.Color;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
@@ -46,6 +52,35 @@ public class ReportService {
     private final OpenSloService openSloService;
     private final MetricRepository metricRepository;
 
+    private static class BackgroundEvent extends PdfPageEventHelper {
+        private Image background;
+
+        public BackgroundEvent(Image background) {
+            this.background = background;
+        }
+
+        @Override
+        public void onEndPage(PdfWriter writer, Document document) {
+            try {
+                PdfContentByte canvas = writer.getDirectContentUnder();
+                float width = document.getPageSize().getWidth();
+                float height = document.getPageSize().getHeight();
+                
+                canvas.saveState();
+                PdfGState gs = new PdfGState();
+                gs.setFillOpacity(0.5f);
+                canvas.setGState(gs);
+                
+                background.setAbsolutePosition(0, 0);
+                background.scaleToFit(width, height);
+                canvas.addImage(background);
+                canvas.restoreState();
+            } catch (DocumentException e) {
+                e.printStackTrace();
+            }
+        }
+    }
+
     public ReportService(OpenSloService openSloService, MetricRepository metricRepository) {
         this.openSloService = openSloService;
         this.metricRepository = metricRepository;
@@ -56,7 +91,17 @@ public class ReportService {
         ByteArrayOutputStream out = new ByteArrayOutputStream();
 
         try {
-            PdfWriter.getInstance(document, out);
+            PdfWriter writer = PdfWriter.getInstance(document, out);
+            
+            // Add background
+            try {
+                InputStream bgStream = new ClassPathResource("static/meloslo a4 background.png").getInputStream();
+                Image background = Image.getInstance(bgStream.readAllBytes());
+                writer.setPageEvent(new BackgroundEvent(background));
+            } catch (IOException e) {
+                System.err.println("Could not load background image: " + e.getMessage());
+            }
+
             document.open();
 
             // Fonts
@@ -64,6 +109,17 @@ public class ReportService {
             Font subTitleFont = FontFactory.getFont(FontFactory.HELVETICA_BOLD, 16, Color.DARK_GRAY);
             Font normalFont = FontFactory.getFont(FontFactory.HELVETICA, 12, Color.BLACK);
             Font boldFont = FontFactory.getFont(FontFactory.HELVETICA_BOLD, 12, Color.BLACK);
+
+            // Logo
+            try {
+                InputStream logoStream = new ClassPathResource("static/meloSLO logo.png").getInputStream();
+                Image logo = Image.getInstance(logoStream.readAllBytes());
+                logo.scaleToFit(100, 100);
+                logo.setAlignment(Element.ALIGN_CENTER);
+                document.add(logo);
+            } catch (IOException e) {
+                System.err.println("Could not load logo image: " + e.getMessage());
+            }
 
             // Title
             Paragraph title = new Paragraph("MeloSlo Annual Performance Report", titleFont);

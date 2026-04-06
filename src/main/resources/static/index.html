@@ -21,19 +21,39 @@
     <!-- JS-YAML for parsing spec -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/js-yaml/4.1.0/js-yaml.min.js"></script>
     <style>
-        body { font-family: 'Inter', sans-serif; }
-        .sidebar-active { border-left: 4px solid #3b82f6; background-color: #eff6ff; color: #1e40af; }
-        pre[class*="language-"] { margin: 0; border-radius: 0.75rem; }
+        body { font-family: 'Inter', sans-serif; position: relative; }
+        body::before {
+            content: "";
+            background-image: url('meloslo%20a4%20background.png');
+            background-size: cover;
+            background-position: center;
+            background-repeat: no-repeat;
+            background-attachment: fixed;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            opacity: 0.5;
+            z-index: -1;
+        }
+        /* Make content areas semi-transparent to see the background */
+        .bg-white { background-color: rgba(255, 255, 255, 0.85) !important; backdrop-filter: blur(8px); }
+        .bg-slate-50 { background-color: transparent !important; }
+        .bg-slate-100 { background-color: transparent !important; }
+        
+        .sidebar-active { border-left: 4px solid #3b82f6; background-color: rgba(239, 246, 255, 0.9) !important; color: #1e40af; }
+        pre[class*="language-"] { margin: 0; border-radius: 0.75rem; background-color: rgba(30, 41, 59, 0.9) !important; }
         [v-cloak] { display: none; }
     </style>
 </head>
-<body class="bg-slate-50 text-slate-900">
+<body class="text-slate-900">
     <div id="app" v-cloak>
         <!-- Login Screen -->
-        <div v-if="!isAuthenticated" class="min-h-screen flex items-center justify-center bg-slate-100 py-12 px-4 sm:px-6 lg:px-8">
+        <div v-if="!isAuthenticated" class="min-h-screen flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
             <div class="max-w-md w-full space-y-8 p-10 bg-white rounded-2xl shadow-xl border border-slate-200">
                 <div class="text-center">
-                    <div class="mx-auto h-12 w-12 bg-blue-600 rounded-xl flex items-center justify-center text-white text-2xl font-bold mb-4 shadow-lg shadow-blue-200">M</div>
+                    <img src="meloSLO%20logo.png" alt="MeloSlo Logo" class="mx-auto h-24 mb-4">
                     <h2 class="text-3xl font-extrabold text-slate-900">Welcome to MeloSlo</h2>
                     <p class="mt-2 text-sm text-slate-600">Please sign in to manage your SLOs</p>
                 </div>
@@ -83,7 +103,7 @@
             <!-- Sidebar -->
             <aside class="w-64 bg-white border-r border-slate-200 flex-shrink-0 hidden md:flex flex-col">
                 <div class="p-6 flex items-center space-x-2">
-                    <div class="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center text-white font-bold">M</div>
+                    <img src="meloSLO%20logo.png" alt="MeloSlo Logo" class="h-10">
                     <span class="text-xl font-bold text-slate-800">MeloSlo</span>
                 </div>
                 <nav class="flex-1 px-4 space-y-1 mt-4">
@@ -512,7 +532,7 @@
                         </div>
                     </div>
 
-                    <!-- Service Details View -->
+                    <!-- Business Services Deatils View -->
                     <div v-if="currentView === 'service-details'" class="space-y-6">
                         <div class="flex items-center justify-between mb-6">
                             <div class="flex items-center space-x-4">
@@ -526,12 +546,12 @@
                             </div>
                             <div class="flex items-center space-x-3">
                                 <span class="px-3 py-1 bg-blue-50 text-blue-700 rounded-full text-xs font-bold border border-blue-100">
-                                    {{ selectedServiceReport ? selectedServiceReport.sloReports.length : 0 }} SLOs Linked
+                                    {{ selectedServiceReport && selectedServiceReport.sloReports ? selectedServiceReport.sloReports.length : 0 }} SLOs Linked
                                 </span>
                             </div>
                         </div>
 
-                        <div v-if="selectedServiceReport" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                        <div v-if="selectedServiceReport && selectedServiceReport.sloReports" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                             <div v-for="report in selectedServiceReport.sloReports" :key="report.name" class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm hover:shadow-md transition-shadow">
                                 <div class="flex justify-between items-start mb-4">
                                     <div>
@@ -563,6 +583,10 @@
                                     </div>
                                 </div>
                             </div>
+                        </div>
+                        <div v-else-if="selectedServiceReport && (!selectedServiceReport.sloReports || selectedServiceReport.sloReports.length === 0)" class="flex flex-col items-center justify-center py-20 bg-white rounded-xl border border-slate-200 border-dashed">
+                            <i class="fas fa-exclamation-circle text-slate-300 text-4xl mb-4"></i>
+                            <p class="text-slate-500 font-medium">No SLOs linked to this service.</p>
                         </div>
                         <div v-else class="flex flex-col items-center justify-center py-20 bg-white rounded-xl border border-slate-200 border-dashed">
                             <i class="fas fa-spinner fa-spin text-slate-300 text-4xl mb-4"></i>
@@ -2153,7 +2177,7 @@ spec:
                     if (currentView.value === 'alerting') return 'Alerting';
                     if (currentView.value === 'details') return 'SLO Details';
                     if (currentView.value === 'sli-details') return 'SLI Details';
-                    if (currentView.value === 'service-details') return 'Service Details';
+                    if (currentView.value === 'service-details') return 'Business Services Deatils';
                     if (currentView.value === 'docs') return 'Documentation';
                     if (currentView.value === 'query') return 'Query Tool';
                     if (currentView.value === 'reports') return 'Annual Reports';

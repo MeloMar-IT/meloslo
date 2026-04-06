@@ -12,6 +12,7 @@ import jakarta.persistence.Table;
 import java.time.LocalDateTime;
 
 @Entity
+@JsonIgnoreProperties({"hibernateLazyInitializer", "handler"})
 public class SliMetric {
 
     @Id
