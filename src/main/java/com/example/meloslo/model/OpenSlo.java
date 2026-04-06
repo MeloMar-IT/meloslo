@@ -23,6 +23,7 @@ import java.util.List;
 
 @Entity
 @Table(name = "openslo_records")
+@JsonIgnoreProperties({"hibernateLazyInitializer", "handler"})
 public class OpenSlo {
 
     @Id
