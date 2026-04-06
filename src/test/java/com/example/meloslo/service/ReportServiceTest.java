@@ -4,11 +4,13 @@ import com.example.meloslo.dto.ReportOptionsDTO;
 import com.example.meloslo.model.OpenSlo;
 import com.example.meloslo.model.SliMetric;
 import com.example.meloslo.repository.MetricRepository;
+import com.lowagie.text.pdf.PdfReader;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 
+import java.io.IOException;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -211,5 +213,22 @@ class ReportServiceTest {
         options.setIncludeErrorBudgetChart(true);
         byte[] pdfBothCharts = reportService.generatePdfReport(options);
         assertNotNull(pdfBothCharts);
+    }
+
+    @Test
+    void shouldGenerateA4SizedPdf() throws IOException {
+        // Arrange
+        ReportOptionsDTO options = new ReportOptionsDTO();
+        options.setIds(Collections.emptyList());
+
+        // Act
+        byte[] pdf = reportService.generatePdfReport(options);
+
+        // Assert
+        assertNotNull(pdf);
+        PdfReader reader = new PdfReader(pdf);
+        assertEquals(595.0f, reader.getPageSize(1).getWidth(), 1.0f);
+        assertEquals(842.0f, reader.getPageSize(1).getHeight(), 1.0f);
+        reader.close();
     }
 }
