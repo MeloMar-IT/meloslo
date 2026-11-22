@@ -265,24 +265,13 @@ class ReportServiceTest {
         return slo;
     }
 
-    private String pdfText(byte[] pdf) throws IOException {
-        PdfReader reader = new PdfReader(pdf);
-        try {
-            com.lowagie.text.pdf.parser.PdfTextExtractor extractor = new com.lowagie.text.pdf.parser.PdfTextExtractor(reader);
-            StringBuilder sb = new StringBuilder();
-            for (int i = 1; i <= reader.getNumberOfPages(); i++) {
-                sb.append(extractor.getTextFromPage(i));
-            }
-            // Numbers use the JVM default locale (e.g. "94,0000%"); normalise the decimal separator
-            return sb.toString().replaceAll("\\s+", "").replace(',', '.');
-        } finally {
-            reader.close();
-        }
+    /** PDF text without whitespace; numbers use the JVM default locale (e.g. "94,0000%"), so the decimal separator is normalised. */
+    private String compactPdfText(byte[] pdf) throws IOException {
+        return pdfText(pdf).replaceAll("\\s+", "").replace(',', '.');
     }
 
     private byte[] generate(OpenSlo slo, int days) {
         when(openSloService.getRecordById(slo.getId())).thenReturn(Optional.of(slo));
-        when(openSloService.getCurrentUserDepartments()).thenReturn(Collections.emptyList());
         when(openSloService.parseTargetFromSpec(anyString())).thenReturn(0.95);
         ReportOptionsDTO options = new ReportOptionsDTO();
         options.setIds(List.of(slo.getId()));
@@ -296,7 +285,7 @@ class ReportServiceTest {
         OpenSlo slo = sloWithSli(40L);
         when(metricRepository.findBySliAndTimestampAfterOrderByTimestampDesc(any(), any())).thenReturn(new ArrayList<>());
 
-        String text = pdfText(generate(slo, 30));
+        String text = compactPdfText(generate(slo, 30));
 
         assertTrue(text.contains("Nodata"), text);
         assertTrue(text.contains("NODATA"), text);
@@ -312,11 +301,13 @@ class ReportServiceTest {
                 new SliMetric(LocalDateTime.now().minusDays(2), 0.90, null, null));
         when(metricRepository.findBySliAndTimestampAfterOrderByTimestampDesc(any(), any())).thenReturn(metrics);
 
-        String text = pdfText(generate(slo, 30));
+        String text = compactPdfText(generate(slo, 30));
 
         // Real service backed by the same samples
         OpenSloService real = new OpenSloService(mock(com.example.meloslo.repository.OpenSloRepository.class),
-                metricRepository, mock(com.example.meloslo.repository.UserRepository.class));
+                metricRepository,
+                new DepartmentAccessService(mock(com.example.meloslo.repository.UserRepository.class)),
+                new OpenSloRedactor());
         var report = real.calculateSloReport(slo);
 
         assertEquals(0.94, report.getCurrentValue(), 1e-9);
@@ -333,7 +324,7 @@ class ReportServiceTest {
                 new SliMetric(LocalDateTime.now().minusDays(5), 0.97, null, null));
         when(metricRepository.findBySliAndTimestampAfterOrderByTimestampDesc(any(), any())).thenReturn(metrics);
 
-        String text = pdfText(generate(slo, 7));
+        String text = compactPdfText(generate(slo, 7));
 
         assertTrue(text.contains("98.0000%"), text);
         assertFalse(text.contains("Nodatainthisperiod."), text);
