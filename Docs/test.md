@@ -12,7 +12,7 @@ Controller unit tests use `@WebMvcTest` and `MockMvc` to verify REST API endpoin
 - `ReportControllerUnitTest`: Tests PDF report generation endpoints.
 - `UserControllerUnitTest`: Tests user management and profile endpoints.
 - `MetricControllerUnitTest`: Verifies SLI metric retrieval.
-- `DatabaseControllerUnitTest`: Tests the SQL query tool for administrators.
+- `DatabaseControllerUnitTest`: Tests the database table endpoints for administrators. Checks that `FILE_READ`, `CSVWRITE` and `CREATE ALIAS` queries are refused and that `JdbcTemplate` is never called.
 
 ### 1.2 Services
 Service unit tests verify the business logic, calculations, and interactions with repositories using Mockito.
@@ -41,10 +41,14 @@ These tests inherit from `BaseFunctionalTest` and use `TestRestTemplate` to perf
 - `UserFunctionalTest`: Tests user registration, login, and departmental access control.
 - `MetricFunctionalTest`: Validates the full flow of metric collection and retrieval.
 - `ReportFunctionalTest`: Ensures that the PDF reporting system works correctly end-to-end.
-- `DatabaseFunctionalTest`: Tests the administrative SQL query tool against the real database schema.
+- `DatabaseFunctionalTest`: Tests the administrative database endpoints against the real database schema, including that `FILE_READ`, `CSVWRITE` and `CREATE ALIAS` are refused.
 
 ### 2.2 Integration & Security
 - `SecurityIntegrationTest`: Verifies the authentication and authorization filters, ensuring that endpoints are protected and departmental restrictions are enforced.
+- `H2ConsoleDefaultProfileTest`: With no profile set, `/h2-console` returns 404 for anonymous users and for `admin/admin`.
+- `H2ConsoleDevProfileTest`: Under `dev`, anonymous requests get 401, `testuser` gets 403, and `admin` gets a 2xx with `X-Frame-Options: SAMEORIGIN`.
+- `ProdProfileSecurityTest`: Under `prod`, `/h2-console` returns 404, no `testuser` exists, and `admin` cannot log in with `admin`.
+- `DataInitializerTest` covers live-mode admin creation: a random password of at least 20 characters, a configured password, a blank password falling back to random, an existing admin left unchanged, and two random passwords differing.
 - `MeloSloApplicationTests`: A simple sanity check to ensure the Spring application context loads correctly.
 
 ## 3. Running Tests

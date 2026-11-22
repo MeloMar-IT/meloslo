@@ -6,7 +6,9 @@ import com.example.meloslo.model.User;
 import com.example.meloslo.repository.MetricRepository;
 import com.example.meloslo.repository.OpenSloRepository;
 import com.example.meloslo.repository.UserRepository;
+import java.security.SecureRandom;
 import java.time.LocalDateTime;
+import java.util.Base64;
 import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -22,12 +24,21 @@ public class DataInitializer {
     @Value("${app.datasource.mode:test}")
     private String datasourceMode;
 
+    @Value("${app.admin.initial-password:}")
+    private String initialAdminPassword;
+
+    private static final SecureRandom RANDOM = new SecureRandom();
+
     private static final Logger log = LoggerFactory.getLogger(DataInitializer.class);
 
     @Bean
     CommandLineRunner initDatabase(OpenSloRepository repository, MetricRepository metricRepository, UserRepository userRepository, PasswordEncoder passwordEncoder) {
         return args -> {
             log.info("Starting startup database verification...");
+            if ("live".equalsIgnoreCase(datasourceMode)) {
+                ensureLiveAdmin(userRepository, passwordEncoder);
+                return;
+            }
             boolean needsInitialization = false;
 
             try {
@@ -85,13 +96,9 @@ public class DataInitializer {
             }
 
             if (needsInitialization) {
-                if ("live".equalsIgnoreCase(datasourceMode)) {
-                    log.info("Database state invalid or incomplete, but datasource mode is LIVE. Seeding basic system users only.");
-                    seedSystemUsers(userRepository, passwordEncoder);
-                } else {
-                    log.info("Database state invalid or incomplete. Reloading test data from scratch...");
-                    reloadDatabase(repository, metricRepository, userRepository, passwordEncoder);
-                }
+                log.info("Database state invalid or incomplete. Reloading test data from scratch...");
+                reloadDatabase(repository, metricRepository, userRepository, passwordEncoder);
+                log.warn("TEST mode: demo accounts admin/admin and testuser/testuser are active. Do not expose this instance.");
             } else {
                 log.info("Database verification successful. All test data is correct.");
             }
@@ -205,13 +212,25 @@ public class DataInitializer {
         log.info("Initialization complete.");
     }
 
-    private void seedSystemUsers(UserRepository userRepository, PasswordEncoder passwordEncoder) {
-        if (userRepository.findByUsername("admin").isEmpty()) {
-            userRepository.save(new User("admin", passwordEncoder.encode("admin"), "admin@meloslo.com", null));
+    void ensureLiveAdmin(UserRepository userRepository, PasswordEncoder passwordEncoder) {
+        if (userRepository.findByUsername("admin").isPresent()) {
+            log.info("LIVE mode: admin exists, no users created.");
+            return;
         }
-        if (userRepository.findByUsername("testuser").isEmpty()) {
-            userRepository.save(new User("testuser", passwordEncoder.encode("testuser"), "testuser@finance.com", "Finance,Engineering"));
+        String password = resolveInitialAdminPassword();
+        userRepository.save(new User("admin", passwordEncoder.encode(password), "admin@meloslo.com", null));
+    }
+
+    String resolveInitialAdminPassword() {
+        if (initialAdminPassword != null && !initialAdminPassword.isBlank()) {
+            log.info("Using configured initial admin password");
+            return initialAdminPassword;
         }
+        byte[] bytes = new byte[18];
+        RANDOM.nextBytes(bytes);
+        String password = Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
+        log.warn("No app.admin.initial-password set. Generated initial password for user 'admin': {} (change it after first login)", password);
+        return password;
     }
 
     private OpenSlo createSli(OpenSloRepository repository, String name, String displayName, String query, OpenSlo datasource, String department) {

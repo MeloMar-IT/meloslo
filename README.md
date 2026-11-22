@@ -41,7 +41,7 @@ The application features a sidebar with the following views:
 - **Data Sources**: Manage your data source records (e.g., Prometheus).
 - **Alerting**: Manage your alerting source records (e.g., Slack webhooks) to receive notifications when SLOs are breached.
 - **Documentation**: Access this documentation directly in the app. For a comprehensive walkthrough of features, see the [MeloSlo User Guide](./Docs/USER_GUIDE.md).
-- **Query Tool**: Execute raw SQL queries against the database (Administrator only). Use this tool to inspect table structures (`api/v1/database/tables`) and verify raw data records across `OPEN_SLO`, `SLI_METRIC`, and `USER` tables. Only `SELECT` queries are permitted for security.
+- **Database Tables**: Browse the internal database tables and their structure (Administrator only), via `api/v1/database/tables`. The free-form SQL query console has been removed; see [Removed: SQL Query Console](#removed-sql-query-console).
 - **User Admin**: Manage user accounts and permissions (Administrator only).
 - **Reports**: Generate annual performance reports for Services and SLOs in PDF format, including performance graphs for the last year. Reports are compliance-aware and automatically handle data gaps by visualizing them as zero-performance periods.
 - **Trend Analysis**: Predictive modeling for SLOs to forecast error budget depletion using linear regression and weekly seasonality.
@@ -53,15 +53,31 @@ The application features a sidebar with the following views:
 
 MeloSlo includes a secure login system and administrative tools to manage users and access control.
 
-- **Default Administrator**: Username: `admin`, Password: `admin` (Full Access)
-- **Test User**: Username: `testuser`, Password: `testuser` (Restricted to 'Finance' and 'Engineering' departments)
+- **Default Administrator**: Username: `admin` (Full Access)
+  - **Test mode (`test`)**: Password `admin`. This is a demo account and must not be exposed.
+  - **Live mode (`live`)**: No fixed password. The password is taken from `APP_ADMIN_INITIAL_PASSWORD` (property `app.admin.initial-password`). If that is not set, a random 24-character password is generated and logged once at WARN level on first startup. Copy it from the log and change it after the first login.
+- **Test User**: Username: `testuser`, Password: `testuser` (Restricted to 'Finance' and 'Engineering' departments). Only seeded in test mode. Live mode never creates this account.
+
+### H2 Console
+
+The H2 database console (`/h2-console`) is **off by default**.
+
+- It is enabled only under the `dev` profile (`spring.h2.console.enabled=true`, `web-allow-others=false`).
+- When enabled, `/h2-console` requires the **ADMIN** role.
+- In the default profile and in `prod`, `/h2-console` returns **404**.
+
+### Removed: SQL Query Console
+
+Table inspection remains available to administrators (see [Database Tables](#database-tables-apiv1database-administrator-only) in the API Reference). The free-form SQL query console (`POST /api/v1/database/query`) has been removed, so H2 file and alias functions such as `FILE_READ`, `CSVWRITE` and `CREATE ALIAS` can no longer be run through the application.
 
 ### Application Modes: Test vs Live
 
 The application can run in two different modes, controlled by the `app.datasource.mode` property.
 
 - **Test Mode (`test`)**: (Default) The application generates simulated metric data for all configured DataSources. This is ideal for demonstrations, local development, and exploring the UI without needing real external connections. In this mode, the database is automatically reloaded with sample data on startup if it's found to be incomplete.
-- **Live Mode (`live`)**: The application attempts to connect to real external endpoints defined in your DataSources to fetch metrics. In this mode, the database initializer only seeds essential system users (`admin` and `testuser`) and does not automatically reload test data, preserving your existing configuration.
+- **Live Mode (`live`)**: The application attempts to connect to real external endpoints defined in your DataSources to fetch metrics. In this mode, the database initializer only creates the `admin` user, and only if it does not already exist. It does not create `testuser` and does not reload test data, preserving your existing configuration. See [Authentication and User Management](#authentication-and-user-management) for how the admin password is set.
+
+Test mode seeds the demo accounts `admin/admin` and `testuser/testuser` and logs a WARN that they are active. Do not expose a test-mode instance.
 
 To switch modes, update `src/main/resources/application.properties`:
 ```properties
@@ -78,8 +94,8 @@ MeloSlo supports different configuration files for Development, Testing, Accepta
 You can create environment-specific property files in `src/main/resources/` following the naming convention `application-{profile}.properties`.
 
 Example files provided:
-- `application-dev.properties` (Development/Test mode)
-- `application-prod.properties` (Production/Live mode)
+- `application-dev.properties` (Development/Test mode; also enables the H2 console)
+- `application-prod.properties` (Production/Live mode; H2 console off)
 
 To start the application with a specific profile, use the `-Dspring.profiles.active` system property:
 
@@ -414,14 +430,11 @@ Manage raw performance data.
   - **Request Body**: `SliMetric` object linking to an SLI and DataSource.
   - **Response**: The created metric (201 Created).
 
-### Database Query Tool (`/api/v1/database`) (Administrator Only)
+### Database Tables (`/api/v1/database`) (Administrator Only)
 
-Power user tools for database exploration. Access is restricted to users with the **ADMIN** role.
+Tools for database inspection. Access is restricted to users with the **ADMIN** role.
 
-- **`POST /api/v1/database/query`**: Execute a raw SQL query.
-  - **Request Body**: `{"sql": "SELECT * FROM openslo_records"}`.
-  - **Constraint**: Only `SELECT` statements are permitted for security reasons.
-  - **Response**: List of results as JSON objects.
+- **`POST /api/v1/database/query`**: Removed. The arbitrary SQL endpoint was closed because a keyword-only `SELECT` filter could not stop H2 functions that read files or define aliases.
 - **`GET /api/v1/database/tables`**: List all tables in the database.
   - **Response**: List of table name strings.
 - **`GET /api/v1/database/tables/{tableName}/structure`**: Retrieve schema information for a specific table.

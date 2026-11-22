@@ -66,7 +66,7 @@ The application features a sidebar providing access to:
 - **Services/SLOs/SLIs**: Management of OpenSLO records.
 - **Data/Alerting Sources**: Integration configurations.
 - **Reports**: Annual PDF performance reports.
-- **Administrative Tools**: User admin and SQL query tool (Admin only).
+- **Administrative Tools**: User admin and database table browser (Admin only).
 
 ### Managing SLO Records
 
@@ -82,8 +82,12 @@ The application features a sidebar providing access to:
 
 The system behavior is controlled by the `app.datasource.mode` configuration in `application.properties`:
 
-- **`test` (Default)**: Generates simulated metric data (0.9–1.0 range). Re-initializes the database with sample data if state is invalid. Ideal for local development.
-- **`live`**: Intended for connection to real external endpoints. Only basic system users are seeded, preserving any production-grade configuration.
+- **`test` (Default)**: Generates simulated metric data (0.9–1.0 range). Re-initializes the database with sample data if state is invalid. Seeds the demo accounts `admin/admin` and `testuser/testuser`. Ideal for local development only.
+- **`live`**: Intended for connection to real external endpoints. Creates only the `admin` user, and only if missing. Its password comes from `APP_ADMIN_INITIAL_PASSWORD`, or is a random value logged once at WARN level. No `testuser` is created.
+
+### H2 Console
+
+The H2 console at `/h2-console` is off by default. It is enabled only under the `dev` profile, and then requires the ADMIN role. In the default and `prod` profiles it returns 404.
 
 ---
 
@@ -114,13 +118,13 @@ The API uses standard HTTP Basic Authentication or session-based cookies. Ensure
 | | `/users` | `GET` | List all users (Admin only). |
 | | `/users` | `POST` | Create a new user (Admin only). |
 | **Database** | `/database/tables` | `GET` | List all internal database tables (Admin only). |
-| | `/database/query` | `POST` | Execute a raw SQL `SELECT` query (Admin only). |
+| | `/database/tables/{tableName}/structure` | `GET` | Show the columns of one table (Admin only). |
 
 ### Example Request (Creating an SLI)
 
 ```bash
 curl -X POST http://localhost:8080/api/v1/openslo \
-     -u admin:admin \
+     -u admin:<admin-password> \
      -H "Content-Type: application/json" \
      -d '{
        "apiVersion": "openslo/v1",
@@ -254,7 +258,7 @@ MeloSlo provides a **30-day forecast**. If the projected line crosses the 0% thr
     mvn clean install
     ```
 2.  **Run**: `mvn spring-boot:run`
-3.  **Access**: `http://localhost:8080` (Default: `admin` / `admin`)
+3.  **Access**: `http://localhost:8080` (Test mode default: `admin` / `admin`. In live mode, use the password from `APP_ADMIN_INITIAL_PASSWORD` or the one logged at startup.)
 
 ### GitFlow Workflow
 
