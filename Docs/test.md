@@ -60,3 +60,19 @@ To run a specific test class:
 ```bash
 ./mvnw test -Dtest=OpenSloServiceTest
 ```
+
+## 4. Continuous Integration
+
+The workflow `.github/workflows/ci.yml` builds and tests the project on every push and every pull request. It:
+
+- checks out the repository (`actions/checkout@v4`);
+- installs Temurin JDK 17, matching `<java.version>` in `pom.xml`, with the Maven cache enabled (`actions/setup-java@v4`);
+- runs `./mvnw -B verify` on `ubuntu-latest`, which compiles the code and runs the full test suite.
+
+A failing compilation or failing test fails the check, so a broken build cannot be merged unnoticed. Test failures are not skipped or ignored. Runs for the same branch or pull request are cancelled when a newer commit is pushed. The job has a 20-minute timeout.
+
+To reproduce the CI build locally, run the same command from the project root:
+
+```bash
+./mvnw -B verify
+```
