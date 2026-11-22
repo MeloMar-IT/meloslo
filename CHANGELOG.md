@@ -1,9 +1,6 @@
 # Changelog
 
 ## [Unreleased]
-### Added
-- Dependabot configuration (`.github/dependabot.yml`) that checks Maven and GitHub Actions dependencies weekly and groups minor and patch updates (#43).
-
 ### Security
 - The H2 console (`/h2-console`) is off by default and enabled only under the `dev` profile, where it requires the ADMIN role (#35).
 - Live mode no longer creates `admin/admin` or `testuser/testuser`. It creates only `admin`, with a password from `APP_ADMIN_INITIAL_PASSWORD` or a random one logged once (#35).
@@ -11,6 +8,7 @@
 
 ### Removed
 - The SQL query console (`POST /api/v1/database/query`) and its UI. Queries using `FILE_READ`, `CSVWRITE` or `CREATE ALIAS` can no longer be run (#35).
+- Dependabot turned off; dependency updates go through issues (#51).
 
 ### Changed
 - The "Query Tool" view is now "Database Tables" and only browses table lists and structures (#35).
