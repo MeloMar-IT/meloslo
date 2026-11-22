@@ -5,14 +5,17 @@ import com.example.meloslo.dto.BusinessServiceReport;
 import com.example.meloslo.dto.SliReport;
 import com.example.meloslo.dto.SloReport;
 import com.example.meloslo.model.OpenSlo;
+import com.example.meloslo.service.InvalidSliValueException;
 import com.example.meloslo.service.OpenSloService;
 import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/v1/openslo")
@@ -74,8 +77,14 @@ public class OpenSloController {
 
     @PostMapping
     public ResponseEntity<OpenSlo> createRecord(@Valid @RequestBody OpenSlo record) {
-        OpenSlo created = service.createRecord(record);
-        return new ResponseEntity<>(created, HttpStatus.CREATED);
+        try {
+            OpenSlo created = service.createRecord(record);
+            return new ResponseEntity<>(created, HttpStatus.CREATED);
+        } catch (AccessDeniedException e) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().build();
+        }
     }
 
     @PutMapping("/{id}")
@@ -83,6 +92,10 @@ public class OpenSloController {
         try {
             OpenSlo updated = service.updateRecord(id, record);
             return ResponseEntity.ok(updated);
+        } catch (AccessDeniedException e) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+        } catch (InvalidSliValueException e) {
+            throw e;
         } catch (RuntimeException e) {
             return ResponseEntity.notFound().build();
         }
@@ -90,7 +103,19 @@ public class OpenSloController {
 
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> deleteRecord(@PathVariable Long id) {
-        service.deleteRecord(id);
-        return ResponseEntity.noContent().build();
+        try {
+            service.deleteRecord(id);
+            return ResponseEntity.noContent().build();
+        } catch (AccessDeniedException e) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+        } catch (RuntimeException e) {
+            return ResponseEntity.notFound().build();
+        }
+    }
+
+    /** Maps a refused SLO target or SLI value to 400 Bad Request with a {@code message} field. */
+    @ExceptionHandler(InvalidSliValueException.class)
+    public ResponseEntity<Map<String, String>> handleInvalidSliValue(InvalidSliValueException e) {
+        return new ResponseEntity<>(Map.of("message", e.getMessage()), HttpStatus.BAD_REQUEST);
     }
 }

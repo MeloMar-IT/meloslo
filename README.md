@@ -25,7 +25,7 @@ OpenSLO is an open-source specification for defining Service Level Objectives (S
 ### Core Concepts
 
 1.  **Business Service**: A logical collection of SLOs. It represents a system or component.
-2.  **SLI (Service Level Indicator)**: A metric that measures some aspect of the service (e.g., latency, availability). **Important**: All SLI metric values must be in the range of **0 to 100**.
+2.  **SLI (Service Level Indicator)**: A metric that measures some aspect of the service (e.g., latency, availability). **Important**: All SLI metric values must be in the range of **0 to 100** (inclusive). A value that is missing, not a number, or outside this range is refused with HTTP 400. SLO targets are written as a fraction (`0.999`, meaning 99.9%) or as `targetPercent` (`99.9`); see [SLO Status and Error Budget](#slo-status-and-error-budget).
 3.  **SLO (Service Level Objective)**: A target value or range of values for an SLI that defines the expected level of service.
 4.  **Error Budget**: The amount of service unreliability that is allowed before the SLO is violated.
 
@@ -34,16 +34,16 @@ OpenSLO is an open-source specification for defining Service Level Objectives (S
 ### Navigation
 
 The application features a sidebar with the following views:
-- **Dashboard**: Overview of your services and SLOs, including healthy, warning, and breaching status.
+- **Dashboard**: Overview of your services and SLOs, including healthy, warning, breaching, and "No data" status.
 - **Services**: Manage your service records and associated SLOs.
 - **SLOs**: Manage your service level objectives and view detailed error budget charts.
 - **SLIs**: Manage your service level indicators.
 - **Data Sources**: Manage your data source records (e.g., Prometheus).
 - **Alerting**: Manage your alerting source records (e.g., Slack webhooks) to receive notifications when SLOs are breached.
 - **Documentation**: Access this documentation directly in the app. For a comprehensive walkthrough of features, see the [MeloSlo User Guide](./Docs/USER_GUIDE.md).
-- **Query Tool**: Execute raw SQL queries against the database (Administrator only). Use this tool to inspect table structures (`api/v1/database/tables`) and verify raw data records across `OPEN_SLO`, `SLI_METRIC`, and `USER` tables. Only `SELECT` queries are permitted for security.
+- **Database Tables**: Browse the internal database tables and their structure (Administrator only), via `api/v1/database/tables`. The free-form SQL query console has been removed; see [Removed: SQL Query Console](#removed-sql-query-console).
 - **User Admin**: Manage user accounts and permissions (Administrator only).
-- **Reports**: Generate annual performance reports for Services and SLOs in PDF format, including performance graphs for the last year. Reports are compliance-aware and automatically handle data gaps by visualizing them as zero-performance periods.
+- **Reports**: Generate annual performance reports for Services and SLOs in PDF format, including performance graphs for the last year. Reports are compliance-aware and show data gaps as "No data" rather than as zero or healthy performance; the PDF and the dashboard use the same calculation rules.
 - **Trend Analysis**: Predictive modeling for SLOs to forecast error budget depletion using linear regression and weekly seasonality.
 - **Thread Management**: Automated background processing for metric collection and alerting using a managed `TaskManagementService`. It includes a watchdog mechanism to automatically terminate long-running or stalled threads (max 5 minutes) to ensure system stability.
 - **Logout**: Securely end your current session.
@@ -53,8 +53,22 @@ The application features a sidebar with the following views:
 
 MeloSlo includes a secure login system and administrative tools to manage users and access control.
 
-- **Default Administrator**: Username: `admin`, Password: `admin` (Role `ADMIN`)
-- **Test User**: Username: `testuser`, Password: `testuser` (Role `USER`, restricted to 'Finance' and 'Engineering' departments)
+- **Default Administrator**: Username: `admin` (Role `ADMIN`, full access)
+  - **Test mode (`test`)**: Password `admin`. This is a demo account and must not be exposed.
+  - **Live mode (`live`)**: No fixed password. The password is taken from `APP_ADMIN_INITIAL_PASSWORD` (property `app.admin.initial-password`). If that is not set, a random 24-character password is generated and logged once at WARN level on first startup. Copy it from the log and change it after the first login.
+- **Test User**: Username: `testuser`, Password: `testuser` (Role `USER`, restricted to 'Finance' and 'Engineering' departments). Only seeded in test mode. Live mode never creates this account.
+
+### H2 Console
+
+The H2 database console (`/h2-console`) is **off by default**.
+
+- It is enabled only under the `dev` profile (`spring.h2.console.enabled=true`, `web-allow-others=false`).
+- When enabled, `/h2-console` requires the **ADMIN** role.
+- In the default profile and in `prod`, `/h2-console` returns **404**.
+
+### Removed: SQL Query Console
+
+Table inspection remains available to administrators (see [Database Tables](#database-tables-apiv1database-administrator-only) in the API Reference). The free-form SQL query console (`POST /api/v1/database/query`) has been removed, so H2 file and alias functions such as `FILE_READ`, `CSVWRITE` and `CREATE ALIAS` can no longer be run through the application.
 
 Each user has a stored **role**, either `ADMIN` or `USER` (default). Only the role decides administrator rights; the username has no effect. Only administrators can list, create, update, or delete users. Any logged-in user can view their own profile and change their own password.
 
@@ -66,8 +80,12 @@ Each user has a stored **role**, either `ADMIN` or `USER` (default). Only the ro
 
 The application can run in two different modes, controlled by the `app.datasource.mode` property.
 
-- **Test Mode (`test`)**: (Default) The application generates simulated metric data for all configured DataSources. This is ideal for demonstrations, local development, and exploring the UI without needing real external connections. In this mode, the database is automatically reloaded with sample data on startup if it's found to be incomplete.
-- **Live Mode (`live`)**: The application attempts to connect to real external endpoints defined in your DataSources to fetch metrics. In this mode, the database initializer only seeds essential system users (`admin` and `testuser`) when the user table is empty, and does not automatically reload test data, preserving your existing configuration. On startup, a user without a role is migrated: `admin` becomes `ADMIN` and all other users become `USER`. In live mode the migrated `admin` must change its password at its first login. A freshly seeded `admin` also has this requirement.
+- **Test Mode (`test`)**: (Default) The application generates simulated metric data for all configured DataSources. This is ideal for demonstrations, local development, and exploring the UI without needing real external connections. In this mode, sample data is seeded on startup only if the database is empty. Existing data is never deleted; set `app.seed=true` to add missing demo records (see [Startup Verification](#startup-verification)).
+- **Live Mode (`live`)**: The application attempts to connect to real external endpoints defined in your DataSources to fetch metrics. In this mode, the database initializer only creates the `admin` user, and only if it does not already exist. It does not create `testuser` and does not reload test data, preserving your existing configuration. See [Authentication and User Management](#authentication-and-user-management) for how the admin password is set.
+
+Test mode seeds the demo accounts `admin/admin` and `testuser/testuser` and logs a WARN that they are active. Do not expose a test-mode instance.
+
+On startup, a user without a role is migrated: `admin` becomes `ADMIN` and all other users become `USER`. In live mode the migrated `admin` must change its password at its first login.
 
 To switch modes, update `src/main/resources/application.properties`:
 ```properties
@@ -84,8 +102,8 @@ MeloSlo supports different configuration files for Development, Testing, Accepta
 You can create environment-specific property files in `src/main/resources/` following the naming convention `application-{profile}.properties`.
 
 Example files provided:
-- `application-dev.properties` (Development/Test mode)
-- `application-prod.properties` (Production/Live mode)
+- `application-dev.properties` (Development/Test mode; also enables the H2 console)
+- `application-prod.properties` (Production/Live mode; H2 console off)
 
 To start the application with a specific profile, use the `-Dspring.profiles.active` system property:
 
@@ -112,11 +130,14 @@ java -jar target/meloslo-0.0.1-SNAPSHOT.jar --spring.config.additional-location=
 ```
 
 #### Access Control
-- **Full Access**: Users with the `ADMIN` role see all records in the system.
-- **Users Without Departments**: A `USER` with no departments listed sees all records.
-- **Departmental Restriction**: Users can be assigned to one or more departments (separated by commas). These users only see records associated with any of those departments across all views (Dashboard, Services, etc.). Records without a department are visible to everyone.
+- **Full Access**: Administrators (`ADMIN` role) see and change all records in the system, including records without a department.
 - **Who Can Change Departments**: Only administrators can change a user's departments or role. A user cannot grant themselves access.
+- **Departmental Restriction**: Users can be assigned to one or more departments (separated by commas). These users only see, create, update and delete records whose department is one of their own, across all views (Dashboard, Services, Reports, etc.) and across the REST API.
 - **Multiple Departments**: A user can be granted access to multiple departments by listing them in their profile (e.g., `Finance,Engineering`). This allows them to monitor and manage records for all assigned departments simultaneously.
+- **Deny by Default**: A non-admin user with no departments assigned sees no records. Records without a department are visible to administrators only.
+- **Department Matching**: Department names are compared ignoring leading/trailing spaces and letter case (`finance` matches `Finance`) in every view and report.
+- **Moving Records**: A user cannot create a record in, or move an existing record to, a department they are not a member of. Such a request is refused with `403 Forbidden`.
+- **Consistent Answers**: A record outside your departments is treated as if it does not exist. It is absent from lists and reports, and by-id requests return `404 Not Found`. Linked records outside your departments (for example an SLI behind an SLO you can see) are removed from the response.
 
 ### Creating and Editing Records
 
@@ -162,7 +183,9 @@ MeloSlo includes an automated scheduler that periodically "fetches" metrics from
 - **Automated Collection**: The background scheduler checks each DataSource and, if the refresh interval has passed, it creates new `SliMetric` records for all SLIs linked to that DataSource.
 - **Thread Management**: To ensure the main application remains responsive, all metric fetching and alerting tasks are executed asynchronously in separate threads managed by the `TaskManagementService`.
 - **Task Watchdog**: To prevent resource exhaustion, the system includes a watchdog that automatically identifies and cancels any background task that has been running for more than 5 minutes.
-- **Error Handling**: If a metric cannot be retrieved (simulated in this version), the value is automatically set to `0.0` to reflect a failure in the indicator.
+- **Error Handling**: If a metric cannot be retrieved, no `SliMetric` sample is stored. The failure is recorded on the SLI instead, in its `lastFetchFailureTime` and `lastFetchError` fields, and the error is logged. A failed fetch therefore never appears as a `0.0` value and never triggers a false breach.
+- **Simulated Failures**: In the simulated fetch (used in `test` mode), a fetch fails randomly with a probability set by `app.datasource.simulated-failure-rate` (default `0.03`, i.e. 3%). Set it to `0` to disable simulated failures.
+- **Missing Data**: An SLI or SLO with no samples in the rolling window has no value. It shows as **No data**, not as 100% healthy. See [SLO Status and Error Budget](#slo-status-and-error-budget).
 - **Last Sync**: The application tracks and displays the last time each DataSource was successfully refreshed.
 
 ## Alerting and Webhooks
@@ -173,7 +196,7 @@ MeloSlo supports automated alerting when an SLO enters the **Breaching** status.
 - **Variables**: The payload template supports the following dynamic variables:
     - `${SLO_NAME}`: The display name (or name) of the breaching SLO.
     - `${SLO_STATUS}`: The current status (e.g., "Breaching").
-    - `${SLO_VALUE}`: The current performance value of the SLO (percentage).
+    - `${SLO_VALUE}`: The current performance value of the SLO, as a percentage on the 0 to 100 scale with three decimals (e.g. `97.500`). The dashboard shows the same value with two decimals.
 - **Association**: Each SLO can be linked to one `AlertingSource`.
 - **Trigger**: When the background scheduler fetches metrics and detects that a linked SLO is breaching, it sends a POST request to the configured webhook URL.
 - **Spam Prevention**: To prevent excessive notifications, MeloSlo will only send an alert once every hour for a specific SLO while it remains in a breaching state.
@@ -327,29 +350,34 @@ MeloSlo supports storing actual performance metrics and calculating SLOs and Err
 MeloSlo allows you to generate professional PDF reports for your Services and SLOs.
 
 - **Time Period**: Reports always cover the performance over the last 365 days.
-- **Selection**: You can select one or more Services or SLOs to include in a single PDF report.
+- **Selection**: You can select one or more Services or SLOs to include in a single PDF report. Selected records outside your departments are skipped silently, and a Service only lists the child SLOs you can see.
 - **Content**: Each report includes:
   - Average performance (SLO value) over the last year.
   - Defined target for the SLO.
   - Remaining error budget for the year.
-  - Current health status (Healthy, Warning, Breaching) based on the annual performance.
-  - Performance graphs with area filling (0 to value) and compliance highlighting (Green/Red).
+  - Current health status (Healthy, Warning, Breaching, or No data) based on the annual performance.
+  - Performance graphs with area filling (0 to value) and compliance highlighting (Green/Red). Periods without samples are left as gaps in the graph; if a report has no samples at all, its chart is replaced by the note "No data in this period." and its Average, Error Budget and Status cells show "No data".
+  - If an SLO's stored target is invalid, the report shows the target as `N/A`, the error budget as `N/A` and the status as `UNKNOWN`.
 - **Service Aggregation**: If a Service is selected, the report automatically includes all SLOs associated with that service.
 
 ## Startup Verification
 
-Upon startup, MeloSlo automatically verifies the state of the database. It checks for:
-- **Required Records**: Ensures that essential sample records (Services, DataSources, SLIs, and SLOs) are present.
-- **Metric Data**: Confirms that each test SLI has at least 30 days of performance data.
-- **Record Connections**: Verifies that all SLOs are correctly linked to a Service and their respective SLIs.
+In test mode, the startup check seeds the demo data only when the database is empty (no OpenSLO records and no users). A database that already contains data is never deleted, reloaded or changed by the check: records you created, renamed or deleted, and users you added, survive every restart.
 
-If any of these conditions are not met, the application will automatically reload the test data from scratch to ensure a consistent environment for demonstration and testing.
+To add the missing demo records to a non-empty database, start the application with `app.seed=true` (property, default `false`, test mode only). This mode:
+- Adds only demo records and demo users that are missing, looked up by name or username. Existing records keep their data, and existing passwords are not changed.
+- Generates 30 days of metric data only for demo SLIs that are created in that run.
+- Never deletes anything.
+
+If the emptiness check fails with a database error, the check logs an error and seeds nothing.
+
+In live mode, `app.seed` is ignored and a WARN is logged. Live mode never seeds demo data.
 
 ### Metric Records
 
 Metrics are stored in the database and linked to an SLI and a DataSource. They represent the actual value of an indicator at a specific point in time.
 
-- **Value Range**: All metric values must be between **0 and 100**.
+- **Value Range**: All metric values must be between **0 and 100** (inclusive). A value that is missing, not a number, or outside this range is refused with `400 Bad Request` and a `message` field. Stored values from the earlier 0 to 1 scale are converted to 0 to 100 once, at startup.
 - `POST /api/v1/metrics`: Create a new metric record.
 - `GET /api/v1/metrics`: Retrieve all metric records.
 
@@ -361,10 +389,17 @@ When viewing the details of an SLO, the application automatically calculates its
   - **Healthy** (Green): Error Budget >= 25%
   - **Warning** (Yellow): Error Budget 0% to 25%
   - **Breaching** (Red): Error Budget < 0%
+  - **No data** (Grey): The rolling window has no samples. Value and error budget are empty (`null`); they are never replaced by 0% or 100%.
+  - **Unknown**: The stored target is invalid (see Target below). No error budget is calculated and the SLO is not counted as breaching.
 - **Rolling Window**: By default, calculations are performed over a 30-day rolling window (customizable via `timeWindow` in the SLO specification).
-- **Target**: The target percentage is extracted from the `objectives` section of the SLO specification.
-- **Current SLO**: Calculated as the average of all linked SLI metric values within the rolling window.
-- **Error Budget**: Calculated as the remaining percentage of allowed unreliability.
+- **Target**: The target is read from the `objectives` section of the SLO specification, in one of two forms:
+  - `target` or `ratioMetrics.target`: a fraction strictly between 0 and 1, e.g. `0.999`. It is converted to a percentage (99.9) for the calculation.
+  - `targetPercent`: a percentage strictly between 0 and 100, e.g. `99.9`.
+  - If no target is given, 99 (99%) is used.
+  - Each objective may set only one of these fields. A target that is not a number, is outside its range (for example `1.0`, `99.9` in `target`, or `100` in `targetPercent`), or sets more than one target field is refused with `400 Bad Request` when the SLO is created or updated.
+- **Current SLO**: Calculated as the average of all linked SLI metric values within the rolling window. If there are no values, the current SLO is empty (`null`).
+- **Error Budget**: Calculated as `(current value - target) / (100 - target) * 100`, the share of the allowed unreliability that remains. For example, with target 99.9 and current value 99.95 the budget is 50% (Healthy). With current value 99.5 it is -400% (Breaching). The value is not capped at 0% or 100%. It is empty when there is no current SLO.
+- **Business Services**: A service's value averages only the SLOs that have data. If none of them have data, the service is **No data**.
 
 #### SLO Specification Example with Calculation Parameters
 
@@ -394,23 +429,23 @@ Manage Services, SLIs, SLOs, and DataSources.
   - **Query Parameters**: `kind` (optional) - Filter records by type (`Service`, `SLI`, `SLO`, `DataSource`).
   - **Response**: List of OpenSlo objects.
 - **`GET /api/v1/openslo/dashboard-stats`**: Retrieve aggregated statistics for the dashboard.
-  - **Response**: `DashboardStats` object (Total Services, SLOs, Healthy, Warning, Breaching).
+  - **Response**: `DashboardStats` object (Total Services, SLOs, Healthy, Warning, Breaching, No data).
 - **`GET /api/v1/openslo/{id}`**: Retrieve a specific record by its database ID.
-  - **Response**: A single OpenSlo object or 404.
+  - **Response**: A single OpenSlo object or 404. A record in another department returns 404.
 - **`POST /api/v1/openslo`**: Create a new OpenSLO record.
-  - **Request Body**: JSON representation of an `OpenSlo` object. Required fields: `apiVersion`, `kind`, `name`, `spec`.
-  - **Response**: The created record (201 Created).
+  - **Request Body**: JSON representation of an `OpenSlo` object. Required fields: `apiVersion`, `kind`, `name`, `spec`. The body must not contain an `id`.
+  - **Response**: The created record (201 Created). 400 if the body contains an `id`, with a `message` field if the SLO target is invalid; 403 if `department` is not one of the caller's departments.
 - **`PUT /api/v1/openslo/{id}`**: Update an existing record.
   - **Request Body**: JSON representation of the updated `OpenSlo` object.
-  - **Response**: The updated record.
+  - **Response**: The updated record. 400 with a `message` field if the SLO target is invalid. 404 if the record does not exist or is in another department. 403 if the new `department` is not one of the caller's departments; nothing is changed in that case.
 - **`DELETE /api/v1/openslo/{id}`**: Delete a record and its associations.
-  - **Response**: 204 No Content.
+  - **Response**: 204 No Content. 404 if the record does not exist or is in another department. 403 when deleting an AlertingSource that is used by an SLO in another department.
 - **`GET /api/v1/openslo/{id}/report`**: (SLO records only) Retrieve a comprehensive status report.
-  - **Response**: `SloReport` containing current value, target, status (Healthy/Warning/Breaching), and error budget.
+  - **Response**: `SloReport` containing current value, target, status (Healthy/Warning/Breaching/No data), and error budget. When there is no data, `currentValue` and `errorBudget` are `null`. Only SLIs visible to the caller contribute; 404 for records in another department.
 - **`GET /api/v1/openslo/{id}/service-report`**: (Service records only) Retrieve a report for all SLOs in a service.
-  - **Response**: `ServiceReport` aggregating data from all child SLOs.
+  - **Response**: `ServiceReport` aggregating data from all child SLOs the caller can see. 404 for records in another department.
 - **`GET /api/v1/openslo/{id}/sli-report`**: (SLI records only) Retrieve a detailed performance report for an SLI.
-  - **Response**: `SliReport` containing recent metric history and averages.
+  - **Response**: `SliReport` containing recent metric history and averages. 404 for records in another department.
 
 ### Metrics API (`/api/v1/metrics`)
 
@@ -420,7 +455,7 @@ Manage raw performance data.
   - **Response**: List of `SliMetric` objects.
 - **`POST /api/v1/metrics`**: Manually record a new metric value for an SLI.
   - **Request Body**: `SliMetric` object linking to an SLI and DataSource.
-  - **Response**: The created metric (201 Created).
+  - **Response**: The created metric (201 Created). Returns `400 Bad Request` if the value is missing, not a number, or outside 0 to 100.
 
 ### User Management (`/api/v1/users`)
 
@@ -442,14 +477,11 @@ Access rules: all `/api/v1/users/**` endpoints require the **ADMIN** role, excep
 - **`DELETE /api/v1/users/{id}`**: Delete a user (ADMIN).
   - **Response**: 200 OK. 404 for an unknown id, 409 when deleting the last administrator.
 
-### Database Query Tool (`/api/v1/database`) (Administrator Only)
+### Database Tables (`/api/v1/database`) (Administrator Only)
 
-Power user tools for database exploration. Access is restricted to users with the **ADMIN** role.
+Tools for database inspection. Access is restricted to users with the **ADMIN** role.
 
-- **`POST /api/v1/database/query`**: Execute a raw SQL query.
-  - **Request Body**: `{"sql": "SELECT * FROM openslo_records"}`.
-  - **Constraint**: Only `SELECT` statements are permitted for security reasons.
-  - **Response**: List of results as JSON objects.
+- **`POST /api/v1/database/query`**: Removed. The arbitrary SQL endpoint was closed because a keyword-only `SELECT` filter could not stop H2 functions that read files or define aliases.
 - **`GET /api/v1/database/tables`**: List all tables in the database.
   - **Response**: List of table name strings.
 - **`GET /api/v1/database/tables/{tableName}/structure`**: Retrieve schema information for a specific table.
@@ -471,6 +503,8 @@ Stores all core OpenSLO entities.
 - **`manager`**: (String) Manager metadata.
 - **`refresh_rate`**: (Integer) Data collection interval for DataSources.
 - **`last_refresh_time`**: (DateTime) Last time this DataSource was synced.
+- **`last_fetch_failure_time`**: (DateTime, nullable) Time of the last failed metric fetch for this SLI. Set only on failure.
+- **`last_fetch_error`**: (String, nullable, max 500 chars) Error message of the last failed metric fetch for this SLI.
 - **`alert_url`**: (String) The webhook URL for AlertingSources.
 - **`alert_payload`**: (Text) The JSON payload template for AlertingSources.
 - **`last_alert_time`**: (DateTime) Last time this SLO triggered an alert.

@@ -45,6 +45,9 @@ public class AlertingService {
 
         String taskId = "Alert-" + slo.getId();
         Long sloId = slo.getId();
+        // Status and value are computed fields; the re-fetched entity does not carry them
+        final String status = slo.getStatus();
+        final Double value = slo.getCurrentValue();
         taskManagementService.runAsyncTask(taskId, () -> {
             OpenSlo currentSlo = openSloRepository.findById(sloId).orElse(null);
             if (currentSlo == null || !"SLO".equalsIgnoreCase(currentSlo.getKind()) || currentSlo.getAlertingSource() == null) {
@@ -60,7 +63,7 @@ public class AlertingService {
                 return;
             }
 
-            String payload = replaceVariables(payloadTemplate, currentSlo);
+            String payload = replaceVariables(payloadTemplate, currentSlo, status, value);
 
             try {
                 log.info("Sending alert for SLO {} to {}", currentSlo.getName(), url);
@@ -78,13 +81,13 @@ public class AlertingService {
         });
     }
 
-    private String replaceVariables(String template, OpenSlo slo) {
+    private String replaceVariables(String template, OpenSlo slo, String status, Double value) {
         if (template == null) return "";
         
         String result = template;
         result = result.replace("${SLO_NAME}", slo.getDisplayName() != null ? slo.getDisplayName() : slo.getName());
-        result = result.replace("${SLO_STATUS}", slo.getStatus() != null ? slo.getStatus() : "Unknown");
-        result = result.replace("${SLO_VALUE}", String.format(Locale.US, "%.2f", slo.getCurrentValue() != null ? slo.getCurrentValue() : 0.0));
+        result = result.replace("${SLO_STATUS}", status != null ? status : "Unknown");
+        result = result.replace("${SLO_VALUE}", String.format(Locale.US, "%.3f", value != null ? value : 0.0));
         
         return result;
     }

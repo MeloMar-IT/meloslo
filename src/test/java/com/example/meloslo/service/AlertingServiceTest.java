@@ -44,7 +44,7 @@ class AlertingServiceTest {
         slo.setName("test-slo");
         slo.setDisplayName("Test SLO");
         slo.setStatus("Breaching");
-        slo.setCurrentValue(0.45);
+        slo.setCurrentValue(99.25);
         slo.setAlertingSource(source);
 
         alertingService.sendAlertIfNeeded(slo);
@@ -62,8 +62,8 @@ class AlertingServiceTest {
         String payload = (String) entityCaptor.getValue().getBody();
         assertTrue(payload.contains("Test SLO"), "Payload should contain SLO display name");
         assertTrue(payload.contains("Breaching"), "Payload should contain status");
-        // Values are formatted with %.2f, so 0.45 becomes "0.45"
-        assertTrue(payload.contains("0.45"), "Payload should contain current value. Got: " + payload);
+        // Values are on the 0 to 100 scale, formatted with 3 decimals like the dashboard
+        assertTrue(payload.contains("99.250"), "Payload should contain current value. Got: " + payload);
 
         verify(openSloRepository).save(slo);
         assertNotNull(slo.getLastAlertTime());
@@ -185,6 +185,40 @@ class AlertingServiceTest {
         String payload = (String) entityCaptor.getValue().getBody();
         assertTrue(payload.contains("null-vars-slo"));
         assertTrue(payload.contains("Breaching"));
-        assertTrue(payload.contains("0.00"));
+        assertTrue(payload.contains("0.000"));
+    }
+
+    @Test
+    void shouldUseSchedulerComputedStatusAndValueWhenRefetchedEntityHasNone() {
+        OpenSlo source = new OpenSlo();
+        source.setKind("AlertingSource");
+        source.setAlertUrl("http://mock-webhook");
+        source.setAlertPayload("${SLO_STATUS} ${SLO_VALUE}%");
+
+        OpenSlo slo = new OpenSlo();
+        slo.setId(5L);
+        slo.setKind("SLO");
+        slo.setName("computed-slo");
+        slo.setStatus("Breaching");
+        slo.setCurrentValue(99.25);
+        slo.setAlertingSource(source);
+
+        // The re-fetched entity has no computed (transient) fields
+        OpenSlo fresh = new OpenSlo();
+        fresh.setId(5L);
+        fresh.setKind("SLO");
+        fresh.setName("computed-slo");
+        fresh.setAlertingSource(source);
+
+        alertingService.sendAlertIfNeeded(slo);
+        when(openSloRepository.findById(5L)).thenReturn(java.util.Optional.of(fresh));
+
+        ArgumentCaptor<Runnable> runnableCaptor = ArgumentCaptor.forClass(Runnable.class);
+        verify(taskManagementService).runAsyncTask(eq("Alert-5"), runnableCaptor.capture());
+        runnableCaptor.getValue().run();
+
+        ArgumentCaptor<HttpEntity> entityCaptor = ArgumentCaptor.forClass(HttpEntity.class);
+        verify(restTemplate).postForEntity(anyString(), entityCaptor.capture(), eq(String.class));
+        assertEquals("Breaching 99.250%", entityCaptor.getValue().getBody());
     }
 }

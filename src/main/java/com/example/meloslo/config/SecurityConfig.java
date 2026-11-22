@@ -2,6 +2,7 @@ package com.example.meloslo.config;
 
 import com.example.meloslo.model.Role;
 import com.example.meloslo.repository.UserRepository;
+import jakarta.servlet.DispatcherType;
 import java.util.List;
 import org.springframework.http.HttpMethod;
 import org.springframework.security.core.GrantedAuthority;
@@ -12,6 +13,7 @@ import org.springframework.security.web.session.HttpSessionEventPublisher;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.autoconfigure.security.servlet.PathRequest;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
@@ -44,17 +46,22 @@ public class SecurityConfig {
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         if (h2ConsoleEnabled) {
-            http.headers(headers -> headers.frameOptions(HeadersConfigurer.FrameOptionsConfig::disable));
+            http.headers(headers -> headers.frameOptions(HeadersConfigurer.FrameOptionsConfig::sameOrigin));
         }
 
         http
             .csrf(AbstractHttpConfigurer::disable) // Keep disabled for now as it's a stateless-style API
             .authorizeHttpRequests(auth -> {
+                // Let error dispatches keep their real status (e.g. 404) instead of becoming 401
+                auth.dispatcherTypeMatchers(DispatcherType.ERROR).permitAll();
                 var authRequests = auth
-                    .requestMatchers("/", "/index.html", "/static/**", "/*.png", "/*.jpg", "/*.jpeg", "/*.gif", "/*.svg", "/*.ico").permitAll();
+                    .requestMatchers("/","/index.html", "/static/**", "/*.png", "/*.jpg", "/*.jpeg", "/*.gif", "/*.svg", "/*.ico").permitAll();
                 
                 if (h2ConsoleEnabled) {
-                    authRequests.requestMatchers("/h2-console/**").permitAll();
+                    authRequests.requestMatchers(PathRequest.toH2Console()).hasRole("ADMIN");
+                } else {
+                    // Nothing is mapped here when the console is off, so the request ends in a 404
+                    authRequests.requestMatchers("/h2-console", "/h2-console/**").permitAll();
                 }
                 
                 authRequests
