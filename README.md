@@ -106,9 +106,13 @@ java -jar target/meloslo-0.0.1-SNAPSHOT.jar --spring.config.additional-location=
 ```
 
 #### Access Control
-- **Full Access**: Administrators (users without departmental restrictions) see all records in the system.
-- **Departmental Restriction**: Users can be assigned to one or more departments (separated by commas). These users only see records associated with any of those departments across all views (Dashboard, Services, etc.).
+- **Full Access**: Administrators (`ADMIN` role) see and change all records in the system, including records without a department.
+- **Departmental Restriction**: Users can be assigned to one or more departments (separated by commas). These users only see, create, update and delete records whose department is one of their own, across all views (Dashboard, Services, Reports, etc.) and across the REST API.
 - **Multiple Departments**: A user can be granted access to multiple departments by listing them in their profile (e.g., `Finance,Engineering`). This allows them to monitor and manage records for all assigned departments simultaneously.
+- **Deny by Default**: A non-admin user with no departments assigned sees no records. Records without a department are visible to administrators only.
+- **Department Matching**: Department names are compared ignoring leading/trailing spaces and letter case (`finance` matches `Finance`) in every view and report.
+- **Moving Records**: A user cannot create a record in, or move an existing record to, a department they are not a member of. Such a request is refused with `403 Forbidden`.
+- **Consistent Answers**: A record outside your departments is treated as if it does not exist. It is absent from lists and reports, and by-id requests return `404 Not Found`. Linked records outside your departments (for example an SLI behind an SLO you can see) are removed from the response.
 
 ### Creating and Editing Records
 
@@ -319,7 +323,7 @@ MeloSlo supports storing actual performance metrics and calculating SLOs and Err
 MeloSlo allows you to generate professional PDF reports for your Services and SLOs.
 
 - **Time Period**: Reports always cover the performance over the last 365 days.
-- **Selection**: You can select one or more Services or SLOs to include in a single PDF report.
+- **Selection**: You can select one or more Services or SLOs to include in a single PDF report. Selected records outside your departments are skipped silently, and a Service only lists the child SLOs you can see.
 - **Content**: Each report includes:
   - Average performance (SLO value) over the last year.
   - Defined target for the SLO.
@@ -388,21 +392,21 @@ Manage Services, SLIs, SLOs, and DataSources.
 - **`GET /api/v1/openslo/dashboard-stats`**: Retrieve aggregated statistics for the dashboard.
   - **Response**: `DashboardStats` object (Total Services, SLOs, Healthy, Warning, Breaching).
 - **`GET /api/v1/openslo/{id}`**: Retrieve a specific record by its database ID.
-  - **Response**: A single OpenSlo object or 404.
+  - **Response**: A single OpenSlo object or 404. A record in another department returns 404.
 - **`POST /api/v1/openslo`**: Create a new OpenSLO record.
-  - **Request Body**: JSON representation of an `OpenSlo` object. Required fields: `apiVersion`, `kind`, `name`, `spec`.
-  - **Response**: The created record (201 Created).
+  - **Request Body**: JSON representation of an `OpenSlo` object. Required fields: `apiVersion`, `kind`, `name`, `spec`. The body must not contain an `id`.
+  - **Response**: The created record (201 Created). 400 if the body contains an `id`; 403 if `department` is not one of the caller's departments.
 - **`PUT /api/v1/openslo/{id}`**: Update an existing record.
   - **Request Body**: JSON representation of the updated `OpenSlo` object.
-  - **Response**: The updated record.
+  - **Response**: The updated record. 404 if the record does not exist or is in another department. 403 if the new `department` is not one of the caller's departments; nothing is changed in that case.
 - **`DELETE /api/v1/openslo/{id}`**: Delete a record and its associations.
-  - **Response**: 204 No Content.
+  - **Response**: 204 No Content. 404 if the record does not exist or is in another department. 403 when deleting an AlertingSource that is used by an SLO in another department.
 - **`GET /api/v1/openslo/{id}/report`**: (SLO records only) Retrieve a comprehensive status report.
-  - **Response**: `SloReport` containing current value, target, status (Healthy/Warning/Breaching), and error budget.
+  - **Response**: `SloReport` containing current value, target, status (Healthy/Warning/Breaching), and error budget. Only SLIs visible to the caller contribute; 404 for records in another department.
 - **`GET /api/v1/openslo/{id}/service-report`**: (Service records only) Retrieve a report for all SLOs in a service.
-  - **Response**: `ServiceReport` aggregating data from all child SLOs.
+  - **Response**: `ServiceReport` aggregating data from all child SLOs the caller can see. 404 for records in another department.
 - **`GET /api/v1/openslo/{id}/sli-report`**: (SLI records only) Retrieve a detailed performance report for an SLI.
-  - **Response**: `SliReport` containing recent metric history and averages.
+  - **Response**: `SliReport` containing recent metric history and averages. 404 for records in another department.
 
 ### Metrics API (`/api/v1/metrics`)
 

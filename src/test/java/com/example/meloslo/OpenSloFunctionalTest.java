@@ -27,6 +27,25 @@ public class OpenSloFunctionalTest extends BaseFunctionalTest {
         openSloRepository.deleteAll();
     }
 
+    private OpenSlo hrRecord(String kind, String name, String displayName) {
+        OpenSlo record = new OpenSlo("openslo/v1", kind, name, displayName, "{}");
+        record.setDepartment("HR");
+        return openSloRepository.save(record);
+    }
+
+    @Test
+    void shouldNotSeeOtherDepartmentRecord() {
+        OpenSlo record = new OpenSlo("openslo/v1", "SLO", "finance-slo", "Finance SLO", "{}");
+        record.setDepartment("Finance");
+        record = openSloRepository.save(record);
+
+        ResponseEntity<OpenSlo> asUser = userAuth().getForEntity("/api/v1/openslo/" + record.getId(), OpenSlo.class);
+        assertThat(asUser.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+
+        ResponseEntity<OpenSlo> asAdmin = adminAuth().getForEntity("/api/v1/openslo/" + record.getId(), OpenSlo.class);
+        assertThat(asAdmin.getStatusCode()).isEqualTo(HttpStatus.OK);
+    }
+
     @Test
     void shouldCreateAndRetrieveOpenSlo() {
         OpenSlo record = new OpenSlo("openslo/v1", "SLO", "test-slo", "Test SLO", "{}");
@@ -45,8 +64,8 @@ public class OpenSloFunctionalTest extends BaseFunctionalTest {
 
     @Test
     void shouldUpdateOpenSlo() {
-        OpenSlo record = openSloRepository.save(new OpenSlo("openslo/v1", "SLO", "test-slo", "Test SLO", "{}"));
-        
+        OpenSlo record = hrRecord("SLO", "test-slo", "Test SLO");
+
         record.setDisplayName("Updated SLO");
         HttpEntity<OpenSlo> request = new HttpEntity<>(record);
         
@@ -58,8 +77,8 @@ public class OpenSloFunctionalTest extends BaseFunctionalTest {
 
     @Test
     void shouldDeleteOpenSlo() {
-        OpenSlo record = openSloRepository.save(new OpenSlo("openslo/v1", "SLO", "test-slo", "Test SLO", "{}"));
-        
+        OpenSlo record = hrRecord("SLO", "test-slo", "Test SLO");
+
         userAuth().delete("/api/v1/openslo/" + record.getId());
         
         ResponseEntity<OpenSlo> getResponse = userAuth().getForEntity("/api/v1/openslo/" + record.getId(), OpenSlo.class);
@@ -68,8 +87,8 @@ public class OpenSloFunctionalTest extends BaseFunctionalTest {
 
     @Test
     void shouldListOpenSloRecords() {
-        openSloRepository.save(new OpenSlo("openslo/v1", "SLO", "slo-1", "SLO 1", "{}"));
-        openSloRepository.save(new OpenSlo("openslo/v1", "SLI", "sli-1", "SLI 1", "{}"));
+        hrRecord("SLO", "slo-1", "SLO 1");
+        hrRecord("SLI", "sli-1", "SLI 1");
         
         ResponseEntity<OpenSlo[]> response = userAuth().getForEntity("/api/v1/openslo", OpenSlo[].class);
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);

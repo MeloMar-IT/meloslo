@@ -76,7 +76,9 @@ The application features a sidebar providing access to:
 ### Access Control & Departments
 
 - **Administrator**: Full system access.
-- **Standard User**: Access limited to assigned departments. Users only see records matching their department (e.g., `Finance, Engineering`).
+- **Standard User**: Access limited to assigned departments. Users only see, create, update and delete records in their own departments (e.g., `Finance, Engineering`).
+- **No departments**: A standard user with no departments assigned sees no records (deny by default). Records without a department are visible to administrators only.
+- **Moving records**: Creating a record in, or moving one to, a department you are not in is refused with `403 Forbidden`. Records in other departments return `404 Not Found` on by-id, report, update and delete requests, and are left out of lists, dashboards and reports.
 
 ### Configuration Modes (Test vs Live)
 
