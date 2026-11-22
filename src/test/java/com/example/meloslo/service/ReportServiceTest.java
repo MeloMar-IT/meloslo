@@ -359,7 +359,6 @@ class ReportServiceTest {
         slo.setSpec("spec: {objectives: [{target: 99.9}]}");
 
         when(openSloService.getRecordById(40L)).thenReturn(Optional.of(slo));
-        when(openSloService.getCurrentUserDepartments()).thenReturn(Collections.emptyList());
         when(openSloService.parseTargetFromSpec(anyString())).thenReturn(null);
         when(metricRepository.findBySliAndTimestampAfterOrderByTimestampDesc(any(), any())).thenReturn(new ArrayList<>());
 
