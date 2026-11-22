@@ -220,8 +220,9 @@ public class DataInitializer {
     }
 
     void ensureLiveAdmin(UserRepository userRepository, PasswordEncoder passwordEncoder) {
-        if (userRepository.findByUsername("admin").isPresent()) {
-            log.info("LIVE mode: admin exists, no users created.");
+        // Only an uninitialized database gets an admin: after a rename or delete of "admin" none is recreated.
+        if (userRepository.count() > 0 || userRepository.findByUsername("admin").isPresent()) {
+            log.info("LIVE mode: users exist, no users created.");
             return;
         }
         String password = resolveInitialAdminPassword();
@@ -244,8 +245,6 @@ public class DataInitializer {
             }
             userRepository.save(user);
         }
-    }
-
     }
 
     String resolveInitialAdminPassword() {

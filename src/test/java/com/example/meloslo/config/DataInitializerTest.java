@@ -202,6 +202,18 @@ class DataInitializerTest {
     }
 
     @Test
+    void liveModeWithRenamedAdminDoesNotRecreateAdmin() throws Exception {
+        when(userRepository.count()).thenReturn(2L);
+        when(userRepository.findByUsername("admin")).thenReturn(Optional.empty());
+        CommandLineRunner runner = liveRunner();
+
+        runner.run();
+
+        verify(userRepository, never()).save(any(User.class));
+        verifyNoInteractions(passwordEncoder);
+    }
+
+    @Test
     void randomPasswordsDiffer() {
         assertThat(dataInitializer.resolveInitialAdminPassword())
             .isNotEqualTo(dataInitializer.resolveInitialAdminPassword());
