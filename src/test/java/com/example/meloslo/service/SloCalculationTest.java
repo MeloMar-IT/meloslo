@@ -73,8 +73,11 @@ class SloCalculationTest {
         assertEquals(95.0, report.getTarget(), 1e-9);
         assertEquals(95.0, report.getCurrentValue(), 1e-9); // (90 + 100) / 2 = 95
         assertEquals(0.0, report.getErrorBudget(), 0.001); // (95 - 95) / (100 - 95) = 0
-        assertTrue(report.getHistoricalSloValues().stream().allMatch(v -> v <= 100.0));
-        assertEquals(100.0, report.getHistoricalSloValues().get(0), 1e-9); // day without data
+        // Historical values stay on 0 to 100; days without samples are null (no data), not 100
+        assertTrue(report.getHistoricalSloValues().stream().filter(java.util.Objects::nonNull).allMatch(v -> v <= 100.0));
+        assertNull(report.getHistoricalSloValues().get(0));
+        assertEquals(90.0, report.getHistoricalSloValues().get(28), 1e-9);
+        assertEquals(100.0, report.getHistoricalSloValues().get(27), 1e-9);
     }
 
     @Test

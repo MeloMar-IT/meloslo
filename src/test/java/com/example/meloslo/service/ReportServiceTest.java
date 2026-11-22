@@ -299,8 +299,8 @@ class ReportServiceTest {
     void pdfAndDashboardCalculationAgreeForTheSameSamples() throws IOException {
         OpenSlo slo = sloWithSli(41L);
         List<SliMetric> metrics = List.of(
-                new SliMetric(LocalDateTime.now().minusDays(1), 0.98, null, null),
-                new SliMetric(LocalDateTime.now().minusDays(2), 0.90, null, null));
+                new SliMetric(LocalDateTime.now().minusDays(1), 98.0, null, null),
+                new SliMetric(LocalDateTime.now().minusDays(2), 90.0, null, null));
         when(metricRepository.findBySliAndTimestampAfterOrderByTimestampDesc(any(), any())).thenReturn(metrics);
 
         String text = compactPdfText(generate(slo, 30));
@@ -312,7 +312,7 @@ class ReportServiceTest {
                 new OpenSloRedactor());
         var report = real.calculateSloReport(slo);
 
-        assertEquals(0.94, report.getCurrentValue(), 1e-9);
+        assertEquals(94.0, report.getCurrentValue(), 1e-9);
         assertEquals("Breaching", report.getStatus());
         assertTrue(text.contains("94.0000%"), text);
         assertTrue(text.contains("BREACHING"), text);
@@ -322,8 +322,8 @@ class ReportServiceTest {
     void pdfWithGapsBetweenSamplesStillRenders() throws IOException {
         OpenSlo slo = sloWithSli(42L);
         List<SliMetric> metrics = List.of(
-                new SliMetric(LocalDateTime.now().minusDays(1), 0.99, null, null),
-                new SliMetric(LocalDateTime.now().minusDays(5), 0.97, null, null));
+                new SliMetric(LocalDateTime.now().minusDays(1), 99.0, null, null),
+                new SliMetric(LocalDateTime.now().minusDays(5), 97.0, null, null));
         when(metricRepository.findBySliAndTimestampAfterOrderByTimestampDesc(any(), any())).thenReturn(metrics);
 
         String text = compactPdfText(generate(slo, 7));

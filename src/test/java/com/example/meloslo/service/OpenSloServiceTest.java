@@ -685,13 +685,13 @@ public class OpenSloServiceTest {
         svc.setSlos(Arrays.asList(withData, withoutData));
         when(repository.findAll()).thenReturn(Arrays.asList(svc));
         when(metricRepository.findBySliAndTimestampAfterOrderByTimestampDesc(eq(withData.getSlis().get(0)), any()))
-                .thenReturn(Arrays.asList(new SliMetric(null, 0.98, null, null)));
+                .thenReturn(Arrays.asList(new SliMetric(null, 98.0, null, null)));
         when(metricRepository.findBySliAndTimestampAfterOrderByTimestampDesc(eq(withoutData.getSlis().get(0)), any()))
                 .thenReturn(List.of());
 
         OpenSlo result = service.getAllRecords().get(0);
 
-        assertThat(result.getCurrentValue()).isCloseTo(0.98, within(0.001));
+        assertThat(result.getCurrentValue()).isCloseTo(98.0, within(0.001));
         assertThat(result.getStatus()).isEqualTo("Healthy");
     }
 
@@ -699,7 +699,7 @@ public class OpenSloServiceTest {
     void historicalValuesAreNullForDaysWithoutSamples() {
         OpenSlo s = sloWithSli("Sparse");
         when(metricRepository.findBySliAndTimestampAfterOrderByTimestampDesc(any(), any()))
-                .thenReturn(Arrays.asList(new SliMetric(java.time.LocalDateTime.now().minusDays(1), 0.98, null, null)));
+                .thenReturn(Arrays.asList(new SliMetric(java.time.LocalDateTime.now().minusDays(1), 98.0, null, null)));
 
         List<Double> history = service.calculateSloReport(s).getHistoricalSloValues();
 
@@ -716,26 +716,26 @@ public class OpenSloServiceTest {
         s.setSlis(Arrays.asList(sliA, sliB));
         LocalDateTime yesterday = LocalDateTime.now().minusDays(1);
 
-        // 50 samples of 0.5 on SLI A come first, then 10 samples of 1.0 on SLI B.
-        // The first 50 entries alone average 0.5; all 60 average 0.5833.
+        // 50 samples of 50 on SLI A come first, then 10 samples of 100 on SLI B.
+        // The first 50 entries alone average 50; all 60 average 58.33.
         List<SliMetric> a = new ArrayList<>();
-        for (int i = 0; i < 50; i++) a.add(new SliMetric(yesterday.withSecond(i), 0.5, sliA, null));
+        for (int i = 0; i < 50; i++) a.add(new SliMetric(yesterday.withSecond(i), 50.0, sliA, null));
         List<SliMetric> b = new ArrayList<>();
-        for (int i = 0; i < 10; i++) b.add(new SliMetric(yesterday.withSecond(i), 1.0, sliB, null));
+        for (int i = 0; i < 10; i++) b.add(new SliMetric(yesterday.withSecond(i), 100.0, sliB, null));
         when(metricRepository.findBySliAndTimestampAfterOrderByTimestampDesc(eq(sliA), any())).thenReturn(a);
         when(metricRepository.findBySliAndTimestampAfterOrderByTimestampDesc(eq(sliB), any())).thenReturn(b);
 
         var report = service.calculateSloReport(s);
 
         assertThat(report.getRecentMetrics()).hasSize(50); // the display list is capped
-        assertThat(report.getHistoricalSloValues().get(28)).isCloseTo((50 * 0.5 + 10 * 1.0) / 60 * 100, within(0.001));
+        assertThat(report.getHistoricalSloValues().get(28)).isCloseTo((50 * 50.0 + 10 * 100.0) / 60, within(0.001));
     }
 
     @Test
     void historicalValuesKeepTrailingNullsWhenLatestSampleIsOld() {
         OpenSlo s = sloWithSli("Stale");
         when(metricRepository.findBySliAndTimestampAfterOrderByTimestampDesc(any(), any()))
-                .thenReturn(Arrays.asList(new SliMetric(LocalDateTime.now().minusDays(5), 0.98, null, null)));
+                .thenReturn(Arrays.asList(new SliMetric(LocalDateTime.now().minusDays(5), 98.0, null, null)));
 
         List<Double> history = service.calculateSloReport(s).getHistoricalSloValues();
 
