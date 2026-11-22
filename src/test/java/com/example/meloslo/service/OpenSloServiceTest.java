@@ -194,7 +194,10 @@ public class OpenSloServiceTest {
         OpenSlo result = service.getRecordById(50L).orElseThrow();
 
         assertThat(result.getSlos()).isEmpty();
-        assertThat(result.getCurrentValue()).isEqualTo(1.0);
+        // No visible child SLO means no data: never a fake 100% / Healthy (issue 39)
+        assertThat(result.getCurrentValue()).isNull();
+        assertThat(result.getErrorBudget()).isNull();
+        assertThat(result.getStatus()).isEqualTo("No data");
         verifyNoInteractions(metricRepository);
     }
 
