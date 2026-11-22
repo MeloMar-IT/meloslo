@@ -14,4 +14,11 @@ public interface OpenSloRepository extends JpaRepository<OpenSlo, Long> {
 
     @org.springframework.data.jpa.repository.Query("SELECT o FROM OpenSlo o LEFT JOIN FETCH o.slis WHERE o.kind = :kind")
     List<OpenSlo> findByKindWithSlis(String kind);
+
+    @org.springframework.data.jpa.repository.Modifying(clearAutomatically = true)
+    @org.springframework.transaction.annotation.Transactional
+    @org.springframework.data.jpa.repository.Query("UPDATE OpenSlo o SET o.lastFetchFailureTime = :time, o.lastFetchError = :error WHERE o.id = :id")
+    int recordFetchFailure(@org.springframework.data.repository.query.Param("id") Long id,
+                           @org.springframework.data.repository.query.Param("time") java.time.LocalDateTime time,
+                           @org.springframework.data.repository.query.Param("error") String error);
 }

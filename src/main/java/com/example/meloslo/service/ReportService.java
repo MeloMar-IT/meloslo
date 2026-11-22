@@ -136,19 +136,14 @@ public class ReportService {
             dateInfo.setSpacingAfter(20);
             document.add(dateInfo);
 
-            List<String> userDepts = openSloService.getCurrentUserDepartments();
-
+            // getRecordById applies the department check and returns only what the caller may see
             for (Long id : options.getIds()) {
                 openSloService.getRecordById(id).ifPresent(record -> {
-                    // Check access
-                    boolean hasAccess = userDepts.isEmpty() || userDepts.contains(record.getDepartment());
-                    if (hasAccess) {
-                        try {
-                            addRecordToPdf(document, record, since, now, subTitleFont, boldFont, normalFont, options);
-                            document.add(new Chunk("\n"));
-                        } catch (DocumentException e) {
-                            e.printStackTrace();
-                        }
+                    try {
+                        addRecordToPdf(document, record, since, now, subTitleFont, boldFont, normalFont, options);
+                        document.add(new Chunk("\n"));
+                    } catch (DocumentException e) {
+                        e.printStackTrace();
                     }
                 });
             }
@@ -186,7 +181,7 @@ public class ReportService {
         }
 
         if ("BusinessService".equalsIgnoreCase(record.getKind())) {
-            List<OpenSlo> slos = record.getSlos();
+            List<OpenSlo> slos = openSloService.getAccessibleSlos(record);
             if (slos == null || slos.isEmpty()) {
                 document.add(new Paragraph("No SLOs associated with this service.", normalFont));
             } else {
@@ -201,10 +196,10 @@ public class ReportService {
                         }
                     }
 
-                    // Always show if the user wants 0s for missing data
                     String timeLabel = options.getTimeValue() + " " + options.getTimeUnit().toLowerCase();
                     document.add(new Paragraph("Business Service Performance Aggregation (" + timeLabel + ")", boldFont));
-                    Map<LocalDateTime, Double> aggregatedData = getAggregatedDataWithZeros(allServiceMetrics, since, now, calculateChronoUnit(since, now));
+                    ChronoUnit aggUnit = calculateChronoUnit(since, now);
+                    Map<LocalDateTime, Double> aggregatedData = SloMath.bucketAverages(allServiceMetrics, since, now, ldt -> truncateTo(ldt, aggUnit), aggUnit);
                     
                     double totalTarget = 0;
                     int targetCount = 0;
@@ -217,12 +212,7 @@ public class ReportService {
                     }
                     Double serviceTarget = targetCount > 0 ? totalTarget / targetCount : null;
                     
-                    Image serviceChart = generateChartImage(record.getDisplayName() + " Aggregated Performance", aggregatedData, serviceTarget, null, "Performance (%)");
-                    if (serviceChart != null) {
-                        serviceChart.scaleToFit(500, 250);
-                        serviceChart.setAlignment(Image.ALIGN_CENTER);
-                        document.add(serviceChart);
-                    }
+                    addChart(document, normalFont, generateChartImage(record.getDisplayName() + " Aggregated Performance", aggregatedData, serviceTarget, null, "Performance (%)"));
                     document.add(new Chunk("\n"));
                 }
 
@@ -250,31 +240,23 @@ public class ReportService {
             }
         }
 
-        // Fill gaps with 0.0 as requested
+        // Buckets without samples stay null (gaps); they are never filled with 0
         ChronoUnit unit = calculateChronoUnit(since, now);
-        Map<LocalDateTime, Double> chartData = getAggregatedDataWithZeros(allMetrics, since, now, unit);
+        Map<LocalDateTime, Double> chartData = SloMath.bucketAverages(allMetrics, since, now, ldt -> truncateTo(ldt, unit), unit);
 
-        // Aggregated values
-        double avgValue = chartData.values().stream()
-                .mapToDouble(Double::doubleValue)
-                .average()
-                .orElse(0.0);
-        
-        Double errorBudget = target == null ? null : SliScale.errorBudget(avgValue, target);
+        // Same calculation as the dashboard/API: plain average of the raw samples
+        Double avgValue = SloMath.average(allMetrics);
+        Double errorBudget = SloMath.errorBudget(avgValue, target);
 
         if (options.isIncludeSloDetails()) {
-            String statusText = "BREACHING";
-            Color statusColor = Color.RED;
-            if (errorBudget == null) {
-                statusText = "UNKNOWN";
-                statusColor = Color.GRAY;
-            } else if (errorBudget >= 25) {
-                statusText = "HEALTHY";
-                statusColor = new Color(0, 128, 0);
-            } else if (errorBudget >= 0) {
-                statusText = "WARNING";
-                statusColor = new Color(255, 165, 0);
-            }
+            String status = SloMath.status(errorBudget, target);
+            String statusText = status.toUpperCase();
+            Color statusColor = switch (status) {
+                case SloMath.HEALTHY -> new Color(0, 128, 0);
+                case SloMath.WARNING -> new Color(255, 165, 0);
+                case SloMath.NO_DATA, SloMath.UNKNOWN -> new Color(128, 128, 128);
+                default -> Color.RED;
+            };
 
             Font statusFont = FontFactory.getFont(FontFactory.HELVETICA_BOLD, 12, statusColor);
 
@@ -294,12 +276,12 @@ public class ReportService {
             if (options.isIncludeAvgPerformance()) {
                 String timeLabel = options.getTimeValue() + " " + options.getTimeUnit().toLowerCase();
                 table.addCell("Average Performance (" + timeLabel + ")");
-                table.addCell(String.format("%.4f%%", avgValue));
+                table.addCell(avgValue == null ? SloMath.NO_DATA : String.format("%.4f%%", avgValue));
             }
 
             if (options.isIncludeErrorBudget()) {
                 table.addCell("Error Budget Remaining");
-                table.addCell(errorBudget == null ? "N/A" : String.format("%.2f%%", errorBudget));
+                table.addCell(errorBudget == null ? (target == null ? "N/A" : SloMath.NO_DATA) : String.format("%.2f%%", errorBudget));
             }
 
             if (options.isIncludeStatus()) {
@@ -314,62 +296,42 @@ public class ReportService {
         // Add Chart
         if (options.isIncludeSloCharts()) {
             if (options.isIncludeMetricsChart()) {
-                Image chartImage = generateChartImage(slo.getDisplayName() + " Performance", chartData, target, null, "Performance (%)");
-                if (chartImage != null) {
-                    chartImage.scaleToFit(500, 250);
-                    chartImage.setAlignment(Image.ALIGN_CENTER);
-                    document.add(chartImage);
-                }
+                addChart(document, normalFont, generateChartImage(slo.getDisplayName() + " Performance", chartData, target, null, "Performance (%)"));
             }
 
             if (options.isIncludeErrorBudgetChart() && target != null) {
-                Map<LocalDateTime, Double> ebData = new TreeMap<>();
-                chartData.forEach((dt, val) -> {
-                    ebData.put(dt, SliScale.errorBudget(val, target));
-                });
-                
-                // Calculate Trend
-                List<Double> trendPoints = openSloService.calculateTrendPoints(allMetrics, target, 30);
+                // Empty buckets stay null so the chart shows a gap instead of a fake value
+                TreeMap<LocalDateTime, Double> ebData = new TreeMap<>();
+                chartData.forEach((dt, val) -> ebData.put(dt, SloMath.errorBudget(val, target)));
+
+                // Calculate Trend (only when there is data)
                 Map<LocalDateTime, Double> trendData = new TreeMap<>();
+                LocalDateTime lastDataKey = ebData.descendingMap().entrySet().stream()
+                        .filter(e -> e.getValue() != null).map(Map.Entry::getKey).findFirst().orElse(null);
+                List<Double> trendPoints = lastDataKey == null ? List.of() : openSloService.calculateTrendPoints(allMetrics, target, 30);
                 if (!trendPoints.isEmpty()) {
-                    LocalDateTime lastDate = ((TreeMap<LocalDateTime, Double>)ebData).lastKey();
-                    trendData.put(lastDate, ebData.get(lastDate));
+                    trendData.put(lastDataKey, ebData.get(lastDataKey));
                     for (int i = 0; i < trendPoints.size(); i++) {
-                        trendData.put(lastDate.plusDays(i + 1), trendPoints.get(i));
+                        trendData.put(lastDataKey.plusDays(i + 1), trendPoints.get(i));
                     }
                 }
 
-                Image ebChartImage = generateChartImage(slo.getDisplayName() + " Error Budget Remaining (%)", ebData, 0.0, trendData, "Error Budget (%)");
-                if (ebChartImage != null) {
-                    ebChartImage.scaleToFit(500, 250);
-                    ebChartImage.setAlignment(Image.ALIGN_CENTER);
-                    document.add(ebChartImage);
-                }
+                addChart(document, normalFont, generateChartImage(slo.getDisplayName() + " Error Budget Remaining (%)", ebData, 0.0, trendData, "Error Budget (%)"));
             }
         }
         
         document.add(new Chunk("\n"));
     }
 
-    private Map<LocalDateTime, Double> getAggregatedDataWithZeros(List<SliMetric> metrics, 
-                                                                  LocalDateTime since, 
-                                                                  LocalDateTime now, 
-                                                                  ChronoUnit unit) {
-        // First aggregate existing metrics
-        Map<LocalDateTime, Double> aggregated = metrics.stream()
-                .collect(Collectors.groupingBy(
-                        sm -> truncateTo(sm.getTimestamp(), unit),
-                        Collectors.averagingDouble(SliMetric::getValue)
-                ));
-        
-        // Then fill missing slots with 0.0
-        LocalDateTime current = truncateTo(since, unit);
-        LocalDateTime end = truncateTo(now, unit);
-        while (current.isBefore(end) || current.isEqual(end)) {
-            aggregated.putIfAbsent(current, 0.0);
-            current = current.plus(1, unit);
+    /** Adds the chart, or a "No data" note when the period has no samples (image is null). */
+    private void addChart(Document document, Font normalFont, Image image) throws DocumentException {
+        if (image == null) {
+            document.add(new Paragraph("No data in this period.", normalFont));
+            return;
         }
-        return aggregated;
+        image.scaleToFit(500, 250);
+        image.setAlignment(Image.ALIGN_CENTER);
+        document.add(image);
     }
 
     private LocalDateTime truncateTo(LocalDateTime ldt, ChronoUnit unit) {
@@ -391,7 +353,7 @@ public class ReportService {
     }
 
     private Image generateChartImage(String title, Map<LocalDateTime, Double> dataPoints, Double target, Map<LocalDateTime, Double> trendData, String yAxisLabel) {
-        if (dataPoints == null || dataPoints.isEmpty()) return null;
+        if (dataPoints == null || dataPoints.values().stream().allMatch(java.util.Objects::isNull)) return null;
 
         TimeSeries series = new TimeSeries("Data");
         TimeSeries targetSeries = new TimeSeries("Target");
@@ -401,6 +363,15 @@ public class ReportService {
 
         for (Map.Entry<LocalDateTime, Double> entry : sortedData.entrySet()) {
             Date date = Date.from(entry.getKey().atZone(ZoneId.systemDefault()).toInstant());
+            if (entry.getValue() == null) {
+                // Gap: no value for this bucket, so lines and areas break here
+                series.addOrUpdate(new Second(date), (Number) null);
+                if (target != null) {
+                    targetSeries.addOrUpdate(new Second(date), (Number) null);
+                    baseSeries.addOrUpdate(new Second(date), (Number) null);
+                }
+                continue;
+            }
             double val = entry.getValue();
 
             series.addOrUpdate(new Second(date), val);

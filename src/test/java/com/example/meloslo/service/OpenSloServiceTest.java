@@ -6,19 +6,24 @@ import com.example.meloslo.dto.SliReport;
 import com.example.meloslo.model.OpenSlo;
 import com.example.meloslo.model.SliMetric;
 import com.example.meloslo.model.User;
+import java.time.LocalDateTime;
 import com.example.meloslo.repository.MetricRepository;
 import com.example.meloslo.repository.OpenSloRepository;
 import com.example.meloslo.repository.UserRepository;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContext;
 import org.springframework.security.core.context.SecurityContextHolder;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
@@ -42,15 +47,285 @@ public class OpenSloServiceTest {
     @Mock
     private UserRepository userRepository;
 
-    @InjectMocks
     private OpenSloService service;
 
     private OpenSlo slo;
 
     @BeforeEach
     void setUp() {
+        service = new OpenSloService(repository, metricRepository,
+                new DepartmentAccessService(userRepository), new OpenSloRedactor());
         slo = new OpenSlo("openslo/v1", "SLO", "TestSLO", "Test SLO", "{}");
         slo.setId(1L);
+    }
+
+    @AfterEach
+    void clearSecurityContext() {
+        SecurityContextHolder.clearContext();
+    }
+
+    private void loginAs(String username, String departments, String role) {
+        if (departments != null || !"ROLE_ADMIN".equals(role)) {
+            lenient().when(userRepository.findByUsername(username))
+                    .thenReturn(Optional.of(new User(username, "pass", username + "@test.com", departments)));
+        }
+        SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(
+                username, "pass", List.of(new SimpleGrantedAuthority(role))));
+    }
+
+    private OpenSlo record(Long id, String kind, String name, String department) {
+        OpenSlo r = new OpenSlo("openslo/v1", kind, name, name + " display", "{}");
+        r.setId(id);
+        r.setDepartment(department);
+        return r;
+    }
+
+    @Test
+    void userCanOnlyGetRecordsOfOwnDepartmentsById() {
+        loginAs("testuser", "Finance,Engineering", "ROLE_USER");
+        when(repository.findById(10L)).thenReturn(Optional.of(record(10L, "SLO", "fin", " finance ")));
+        when(repository.findById(11L)).thenReturn(Optional.of(record(11L, "SLO", "hr", "HR")));
+        when(repository.findById(12L)).thenReturn(Optional.of(record(12L, "SLO", "none", null)));
+
+        assertThat(service.getRecordById(10L)).isPresent();
+        assertThat(service.getRecordById(11L)).isEmpty();
+        assertThat(service.getRecordById(12L)).isEmpty();
+    }
+
+    @Test
+    void adminCanGetRecordWithoutDepartment() {
+        loginAs("admin", null, "ROLE_ADMIN");
+        when(repository.findById(12L)).thenReturn(Optional.of(record(12L, "SLO", "none", null)));
+
+        assertThat(service.getRecordById(12L)).isPresent();
+    }
+
+    @Test
+    void userWithoutDepartmentsSeesNothing() {
+        loginAs("nodept", null, "ROLE_USER");
+        when(repository.findAll()).thenReturn(Arrays.asList(record(10L, "SLO", "fin", "Finance")));
+        when(repository.findById(10L)).thenReturn(Optional.of(record(10L, "SLO", "fin", "Finance")));
+
+        assertThat(service.getAllRecords()).isEmpty();
+        assertThat(service.getRecordById(10L)).isEmpty();
+        assertThrows(AccessDeniedException.class, () -> service.createRecord(record(null, "SLO", "n", "Finance")));
+    }
+
+    @Test
+    void listExcludesRecordsWithoutDepartmentForUsers() {
+        loginAs("testuser", "Finance", "ROLE_USER");
+        when(repository.findAll()).thenReturn(Arrays.asList(
+                record(1L, "SLO", "fin", "Finance"), record(2L, "SLO", "none", null), record(3L, "SLO", "blank", " ")));
+
+        assertThat(service.getAllRecords()).extracting(OpenSlo::getName).containsExactly("fin");
+    }
+
+    @Test
+    void dashboardStatsAreZeroForUserWithoutDepartments() {
+        loginAs("nodept", "  ", "ROLE_USER");
+        when(repository.findByKind("BusinessService")).thenReturn(Arrays.asList(record(1L, "BusinessService", "s", "Finance")));
+        when(repository.findByKind("SLO")).thenReturn(Arrays.asList(record(2L, "SLO", "o", "Finance")));
+
+        DashboardStats stats = service.getDashboardStats();
+
+        assertThat(stats.getTotalBusinessServices()).isZero();
+        assertThat(stats.getTotalSlos()).isZero();
+        assertThat(stats.getHealthySlos() + stats.getWarningSlos() + stats.getBreachingSlos()).isZero();
+    }
+
+    @Test
+    void linkedRecordsOfOtherDepartmentsAreRedactedWithoutTouchingTheEntity() {
+        loginAs("testuser", "Finance", "ROLE_USER");
+        OpenSlo infraSli = record(20L, "SLI", "infra-sli", "Infrastructure");
+        OpenSlo finSli = record(21L, "SLI", "fin-sli", "Finance");
+        OpenSlo infraAlert = record(22L, "AlertingSource", "infra-alert", "Infrastructure");
+        OpenSlo finSlo = record(23L, "SLO", "fin-slo", "Finance");
+        finSlo.setSlis(new ArrayList<>(Arrays.asList(infraSli, finSli)));
+        finSlo.setAlertingSource(infraAlert);
+        when(repository.findById(23L)).thenReturn(Optional.of(finSlo));
+        when(metricRepository.findBySliAndTimestampAfterOrderByTimestampDesc(any(), any())).thenReturn(new ArrayList<>());
+
+        OpenSlo result = service.getRecordById(23L).orElseThrow();
+
+        assertThat(result.getSlis()).extracting(OpenSlo::getName).containsExactly("fin-sli");
+        assertThat(result.getAlertingSource()).isNull();
+        assertThat(finSlo.getSlis()).hasSize(2);
+        assertThat(finSlo.getAlertingSource()).isSameAs(infraAlert);
+        verify(metricRepository, never()).findBySliAndTimestampAfterOrderByTimestampDesc(eq(infraSli), any());
+    }
+
+    @Test
+    void reportsOnOtherDepartmentsRecordsAreNotFound() {
+        loginAs("testuser", "Finance", "ROLE_USER");
+        when(repository.findById(30L)).thenReturn(Optional.of(record(30L, "SLO", "hr-slo", "HR")));
+        when(repository.findById(31L)).thenReturn(Optional.of(record(31L, "SLI", "hr-sli", "HR")));
+        when(repository.findById(32L)).thenReturn(Optional.of(record(32L, "BusinessService", "hr-svc", "HR")));
+
+        assertThrows(RuntimeException.class, () -> service.getSloReport(30L));
+        assertThrows(RuntimeException.class, () -> service.getSliReport(31L));
+        assertThrows(RuntimeException.class, () -> service.getServiceReport(32L));
+        verifyNoInteractions(metricRepository);
+    }
+
+    @Test
+    void serviceReportIncludesOnlyVisibleChildren() {
+        loginAs("testuser", "Finance", "ROLE_USER");
+        OpenSlo svc = record(40L, "BusinessService", "svc", "Finance");
+        svc.setSlos(new ArrayList<>(Arrays.asList(
+                record(41L, "SLO", "fin-child", "Finance"), record(42L, "SLO", "hr-child", "HR"))));
+        when(repository.findById(40L)).thenReturn(Optional.of(svc));
+
+        BusinessServiceReport report = service.getServiceReport(40L);
+
+        assertThat(report.getSloReports()).extracting(r -> r.getName()).containsExactly("fin-child");
+        assertThat(service.getAccessibleSlos(svc)).extracting(OpenSlo::getName).containsExactly("fin-child");
+    }
+
+    @Test
+    void businessServiceAggregatesOnlyVisibleChildren() {
+        loginAs("testuser", "Finance", "ROLE_USER");
+        OpenSlo svc = record(50L, "BusinessService", "svc", "Finance");
+        OpenSlo hrChild = record(52L, "SLO", "hr-child", "HR");
+        OpenSlo hrSli = record(53L, "SLI", "hr-sli", "HR");
+        hrChild.setSlis(new ArrayList<>(Arrays.asList(hrSli)));
+        svc.setSlos(new ArrayList<>(Arrays.asList(hrChild)));
+        when(repository.findById(50L)).thenReturn(Optional.of(svc));
+
+        OpenSlo result = service.getRecordById(50L).orElseThrow();
+
+        assertThat(result.getSlos()).isEmpty();
+        // No visible child SLO means no data: never a fake 100% / Healthy (issue 39)
+        assertThat(result.getCurrentValue()).isNull();
+        assertThat(result.getErrorBudget()).isNull();
+        assertThat(result.getStatus()).isEqualTo("No data");
+        verifyNoInteractions(metricRepository);
+    }
+
+    @Test
+    void userCannotCreateInForeignOrMissingDepartment() {
+        loginAs("testuser", "Finance", "ROLE_USER");
+
+        assertThrows(AccessDeniedException.class, () -> service.createRecord(record(null, "SLO", "a", "HR")));
+        assertThrows(AccessDeniedException.class, () -> service.createRecord(record(null, "SLO", "b", null)));
+        verify(repository, never()).save(any());
+    }
+
+    @Test
+    void userCanCreateInOwnDepartmentIgnoringCase() {
+        loginAs("testuser", "Finance", "ROLE_USER");
+        OpenSlo input = record(null, "SLO", "a", "finance");
+        when(repository.save(input)).thenReturn(input);
+
+        OpenSlo created = service.createRecord(input);
+
+        assertThat(created.getDepartment()).isEqualTo("finance");
+        verify(repository).save(input);
+    }
+
+    @Test
+    void createWithExistingIdIsRejected() {
+        loginAs("admin", null, "ROLE_ADMIN");
+
+        assertThrows(IllegalArgumentException.class, () -> service.createRecord(record(5L, "SLO", "a", "Finance")));
+        verify(repository, never()).save(any());
+    }
+
+    @Test
+    void updateOfOtherDepartmentsRecordIsNotFound() {
+        loginAs("testuser", "Finance", "ROLE_USER");
+        when(repository.findById(60L)).thenReturn(Optional.of(record(60L, "SLO", "hr", "HR")));
+
+        assertThrows(RuntimeException.class, () -> service.updateRecord(60L, record(null, "SLO", "hr", "Finance")));
+        verify(repository, never()).save(any());
+    }
+
+    @Test
+    void updateCannotMoveRecordToForeignDepartment() {
+        loginAs("testuser", "Finance", "ROLE_USER");
+        OpenSlo existing = record(61L, "SLO", "fin", "Finance");
+        when(repository.findById(61L)).thenReturn(Optional.of(existing));
+
+        assertThrows(AccessDeniedException.class,
+                () -> service.updateRecord(61L, record(null, "SLO", "renamed", "Infrastructure")));
+
+        assertThat(existing.getDepartment()).isEqualTo("Finance");
+        assertThat(existing.getName()).isEqualTo("fin");
+        verify(repository, never()).save(any());
+    }
+
+    @Test
+    void updateCanMoveRecordBetweenOwnDepartments() {
+        loginAs("testuser", "Finance,Engineering", "ROLE_USER");
+        OpenSlo existing = record(62L, "SLO", "fin", "Finance");
+        when(repository.findById(62L)).thenReturn(Optional.of(existing));
+        when(repository.save(existing)).thenReturn(existing);
+
+        OpenSlo result = service.updateRecord(62L, record(null, "SLO", "fin", "Engineering"));
+
+        assertThat(result.getDepartment()).isEqualTo("Engineering");
+        verify(repository).save(existing);
+    }
+
+    @Test
+    void deleteOfOtherDepartmentsOrMissingRecordIsNotFound() {
+        loginAs("testuser", "Finance", "ROLE_USER");
+        when(repository.findById(70L)).thenReturn(Optional.of(record(70L, "SLO", "hr", "HR")));
+        when(repository.findById(71L)).thenReturn(Optional.empty());
+
+        assertThrows(RuntimeException.class, () -> service.deleteRecord(70L));
+        assertThrows(RuntimeException.class, () -> service.deleteRecord(71L));
+        verify(repository, never()).delete(any());
+        verifyNoInteractions(metricRepository);
+    }
+
+    @Test
+    void userCannotDeleteAlertingSourceUsedByForeignSlo() {
+        loginAs("testuser", "Finance", "ROLE_USER");
+        OpenSlo source = record(80L, "AlertingSource", "fin-alert", "Finance");
+        OpenSlo foreignSlo = record(81L, "SLO", "hr-slo", "HR");
+        foreignSlo.setAlertingSource(source);
+        when(repository.findById(80L)).thenReturn(Optional.of(source));
+        when(repository.findByKind("SLO")).thenReturn(List.of(foreignSlo));
+
+        assertThrows(AccessDeniedException.class, () -> service.deleteRecord(80L));
+
+        assertThat(foreignSlo.getAlertingSource()).isSameAs(source);
+        verify(repository, never()).save(any());
+        verify(repository, never()).delete(any());
+        verifyNoInteractions(metricRepository);
+    }
+
+    @Test
+    void userDeletingAlertingSourceUnlinksOnlyOwnSlos() {
+        loginAs("testuser", "Finance", "ROLE_USER");
+        OpenSlo source = record(82L, "AlertingSource", "fin-alert", "Finance");
+        OpenSlo ownSlo = record(83L, "SLO", "fin-slo", "Finance");
+        ownSlo.setAlertingSource(source);
+        when(repository.findById(82L)).thenReturn(Optional.of(source));
+        when(repository.findByKind("SLO")).thenReturn(List.of(ownSlo));
+
+        service.deleteRecord(82L);
+
+        assertThat(ownSlo.getAlertingSource()).isNull();
+        verify(repository).save(ownSlo);
+        verify(repository).delete(source);
+    }
+
+    @Test
+    void sliReportMetricsDoNotExposeForeignDatasource() {
+        loginAs("testuser", "Finance", "ROLE_USER");
+        OpenSlo sli = record(90L, "SLI", "fin-sli", "Finance");
+        OpenSlo infraDs = record(91L, "DataSource", "infra-ds", "Infrastructure");
+        SliMetric metric = new SliMetric(LocalDateTime.now(), 0.9, sli, infraDs);
+        when(repository.findById(90L)).thenReturn(Optional.of(sli));
+        when(metricRepository.findBySliOrderByTimestampDesc(sli)).thenReturn(List.of(metric));
+
+        SliReport report = service.getSliReport(90L);
+
+        assertThat(report.getRecentMetrics()).hasSize(1);
+        assertThat(report.getRecentMetrics().get(0).getSli().getName()).isEqualTo("fin-sli");
+        assertThat(report.getRecentMetrics().get(0).getDatasource()).isNull();
+        assertThat(metric.getDatasource()).isSameAs(infraDs);
     }
 
     @Test
@@ -330,6 +605,155 @@ public class OpenSloServiceTest {
         assertThat(result.getCurrentValue()).isCloseTo(98.0, within(0.001));
         assertThat(result.getStatus()).isEqualTo("Healthy");
         assertThat(result.getErrorBudget()).isNotNull();
+    }
+
+    private static final String SPEC_95 = "spec:\n  objectives:\n    - target: 0.95\n  timeWindow:\n    - duration: 30d";
+
+    private OpenSlo sloWithSli(String name) {
+        OpenSlo sli = new OpenSlo("openslo/v1", "SLI", name + "-sli", name + " SLI", "{}");
+        OpenSlo s = new OpenSlo("openslo/v1", "SLO", name, name, SPEC_95);
+        s.setSlis(Arrays.asList(sli));
+        return s;
+    }
+
+    @Test
+    void sloWithoutSamplesReportsNoData() {
+        OpenSlo s = sloWithSli("Empty");
+        when(metricRepository.findBySliAndTimestampAfterOrderByTimestampDesc(any(), any())).thenReturn(List.of());
+
+        var report = service.calculateSloReport(s);
+
+        assertThat(report.getStatus()).isEqualTo("No data");
+        assertThat(report.getCurrentValue()).isNull();
+        assertThat(report.getErrorBudget()).isNull();
+    }
+
+    @Test
+    void dashboardStatsCountNoDataSeparately() {
+        OpenSlo s = sloWithSli("Empty");
+        when(repository.findByKind("BusinessService")).thenReturn(List.of());
+        when(repository.findByKind("SLO")).thenReturn(List.of(s));
+        when(metricRepository.findBySliAndTimestampAfterOrderByTimestampDesc(any(), any())).thenReturn(List.of());
+
+        DashboardStats stats = service.getDashboardStats();
+
+        assertThat(stats.getNoDataSlos()).isEqualTo(1);
+        assertThat(stats.getBreachingSlos()).isEqualTo(0);
+        assertThat(stats.getHealthySlos()).isEqualTo(0);
+        assertThat(stats.getWarningSlos()).isEqualTo(0);
+    }
+
+    @Test
+    void getAllRecordsGivesNoDataForSloWithoutSlisAndWithoutMetrics() {
+        SecurityContextHolder.clearContext();
+        OpenSlo noSlis = new OpenSlo("openslo/v1", "SLO", "NoSlis", "No SLIs", SPEC_95);
+        OpenSlo noMetrics = sloWithSli("NoMetrics");
+        when(repository.findAll()).thenReturn(Arrays.asList(noSlis, noMetrics));
+
+        List<OpenSlo> results = service.getAllRecords();
+
+        for (OpenSlo r : results) {
+            assertThat(r.getStatus()).isEqualTo("No data");
+            assertThat(r.getCurrentValue()).isNull();
+            assertThat(r.getErrorBudget()).isNull();
+        }
+    }
+
+    @Test
+    void businessServiceWithoutDataOrSlosIsNoData() {
+        SecurityContextHolder.clearContext();
+        OpenSlo withEmptySlo = new OpenSlo("openslo/v1", "BusinessService", "Svc1", "Svc1", "{}");
+        withEmptySlo.setSlos(Arrays.asList(sloWithSli("Empty")));
+        OpenSlo withoutSlos = new OpenSlo("openslo/v1", "BusinessService", "Svc2", "Svc2", "{}");
+        when(repository.findAll()).thenReturn(Arrays.asList(withEmptySlo, withoutSlos));
+
+        List<OpenSlo> results = service.getAllRecords();
+
+        for (OpenSlo r : results) {
+            assertThat(r.getStatus()).isEqualTo("No data");
+            assertThat(r.getCurrentValue()).isNull();
+            assertThat(r.getErrorBudget()).isNull();
+        }
+    }
+
+    @Test
+    void businessServiceUsesOnlySlosWithData() {
+        SecurityContextHolder.clearContext();
+        OpenSlo withData = sloWithSli("WithData");
+        OpenSlo withoutData = sloWithSli("WithoutData");
+        OpenSlo svc = new OpenSlo("openslo/v1", "BusinessService", "Svc", "Svc", "{}");
+        svc.setSlos(Arrays.asList(withData, withoutData));
+        when(repository.findAll()).thenReturn(Arrays.asList(svc));
+        when(metricRepository.findBySliAndTimestampAfterOrderByTimestampDesc(eq(withData.getSlis().get(0)), any()))
+                .thenReturn(Arrays.asList(new SliMetric(null, 0.98, null, null)));
+        when(metricRepository.findBySliAndTimestampAfterOrderByTimestampDesc(eq(withoutData.getSlis().get(0)), any()))
+                .thenReturn(List.of());
+
+        OpenSlo result = service.getAllRecords().get(0);
+
+        assertThat(result.getCurrentValue()).isCloseTo(0.98, within(0.001));
+        assertThat(result.getStatus()).isEqualTo("Healthy");
+    }
+
+    @Test
+    void historicalValuesAreNullForDaysWithoutSamples() {
+        OpenSlo s = sloWithSli("Sparse");
+        when(metricRepository.findBySliAndTimestampAfterOrderByTimestampDesc(any(), any()))
+                .thenReturn(Arrays.asList(new SliMetric(java.time.LocalDateTime.now().minusDays(1), 0.98, null, null)));
+
+        List<Double> history = service.calculateSloReport(s).getHistoricalSloValues();
+
+        assertThat(history).hasSize(30);
+        assertThat(history.get(28)).isCloseTo(98.0, within(0.001));
+        assertThat(history.stream().filter(java.util.Objects::isNull).count()).isEqualTo(29);
+    }
+
+    @Test
+    void historicalValuesUseAllSamplesAcrossSlisNotTheCappedList() {
+        OpenSlo sliA = new OpenSlo("openslo/v1", "SLI", "A", "A", "{}");
+        OpenSlo sliB = new OpenSlo("openslo/v1", "SLI", "B", "B", "{}");
+        OpenSlo s = new OpenSlo("openslo/v1", "SLO", "Multi", "Multi", SPEC_95);
+        s.setSlis(Arrays.asList(sliA, sliB));
+        LocalDateTime yesterday = LocalDateTime.now().minusDays(1);
+
+        // 50 samples of 0.5 on SLI A come first, then 10 samples of 1.0 on SLI B.
+        // The first 50 entries alone average 0.5; all 60 average 0.5833.
+        List<SliMetric> a = new ArrayList<>();
+        for (int i = 0; i < 50; i++) a.add(new SliMetric(yesterday.withSecond(i), 0.5, sliA, null));
+        List<SliMetric> b = new ArrayList<>();
+        for (int i = 0; i < 10; i++) b.add(new SliMetric(yesterday.withSecond(i), 1.0, sliB, null));
+        when(metricRepository.findBySliAndTimestampAfterOrderByTimestampDesc(eq(sliA), any())).thenReturn(a);
+        when(metricRepository.findBySliAndTimestampAfterOrderByTimestampDesc(eq(sliB), any())).thenReturn(b);
+
+        var report = service.calculateSloReport(s);
+
+        assertThat(report.getRecentMetrics()).hasSize(50); // the display list is capped
+        assertThat(report.getHistoricalSloValues().get(28)).isCloseTo((50 * 0.5 + 10 * 1.0) / 60 * 100, within(0.001));
+    }
+
+    @Test
+    void historicalValuesKeepTrailingNullsWhenLatestSampleIsOld() {
+        OpenSlo s = sloWithSli("Stale");
+        when(metricRepository.findBySliAndTimestampAfterOrderByTimestampDesc(any(), any()))
+                .thenReturn(Arrays.asList(new SliMetric(LocalDateTime.now().minusDays(5), 0.98, null, null)));
+
+        List<Double> history = service.calculateSloReport(s).getHistoricalSloValues();
+
+        assertThat(history).hasSize(30);
+        assertThat(history.get(24)).isCloseTo(98.0, within(0.001)); // 5 days ago
+        for (int i = 25; i < 30; i++) {
+            assertThat(history.get(i)).isNull(); // the last 5 days, up to today, stay gaps
+        }
+    }
+
+    @Test
+    void sliReportWithoutMetricsHasNullCurrentValue() {
+        OpenSlo sli = new OpenSlo("openslo/v1", "SLI", "EmptySLI", "Empty SLI", "{}");
+        sli.setId(9L);
+        when(repository.findById(9L)).thenReturn(Optional.of(sli));
+        when(metricRepository.findBySliOrderByTimestampDesc(sli)).thenReturn(List.of());
+
+        assertThat(service.getSliReport(9L).getCurrentValue()).isNull();
     }
 
     @Test

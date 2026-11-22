@@ -12,12 +12,13 @@ Controller unit tests use `@WebMvcTest` and `MockMvc` to verify REST API endpoin
 - `ReportControllerUnitTest`: Tests PDF report generation endpoints.
 - `UserControllerUnitTest`: Tests user management and profile endpoints.
 - `MetricControllerUnitTest`: Verifies SLI metric retrieval.
-- `DatabaseControllerUnitTest`: Tests the SQL query tool for administrators.
+- `DatabaseControllerUnitTest`: Tests the database table endpoints for administrators. Checks that `FILE_READ`, `CSVWRITE` and `CREATE ALIAS` queries are refused and that `JdbcTemplate` is never called.
 
 ### 1.2 Services
 Service unit tests verify the business logic, calculations, and interactions with repositories using Mockito.
 - `OpenSloServiceTest`: Validates logic for filtering records by department, parsing OpenSLO specifications, and managing records.
 - `SloCalculationTest`: Focuses on error budget calculations and status determination (Healthy, Warning, Breaching).
+- `SloMathTest`: Covers the shared rules used by the dashboard and the PDF report: averages that skip missing samples, error budget, status including "No data", and per-bucket averages with gaps.
 - `ReportServiceTest`: Tests the generation of PDF reports and data aggregation for reports.
 - `AlertingServiceTest`: Verifies the webhook alerting logic, payload variable replacement, and anti-spam protection.
 - `MetricFetchSchedulerTest`: Tests the background scheduling of metric collection from DataSources.
@@ -31,6 +32,9 @@ Repository tests use `@DataJpaTest` to verify database interactions, custom quer
 - `UserRepositoryTest`: Tests user account persistence and department-based filtering queries.
 - `EncryptionTest`: Ensures that sensitive data (like credentials in spec) is correctly encrypted/decrypted.
 
+### 1.4 Dependencies
+- `DependencyBaselineTest`: Guards against a downgrade of the Spring stack. It checks that Spring Boot is at least 3.5, Spring Framework at least 6.2 and Spring Security at least 6.5 (minimum versions only), and that the version comparison helper behaves correctly.
+
 ## 2. Functional & Integration Tests
 
 Functional tests verify the application as a whole or large parts of it, often involving a real database (H2 in-memory) and the full Spring context.
@@ -41,10 +45,15 @@ These tests inherit from `BaseFunctionalTest` and use `TestRestTemplate` to perf
 - `UserFunctionalTest`: Tests user registration, login, and departmental access control.
 - `MetricFunctionalTest`: Validates the full flow of metric collection and retrieval.
 - `ReportFunctionalTest`: Ensures that the PDF reporting system works correctly end-to-end.
-- `DatabaseFunctionalTest`: Tests the administrative SQL query tool against the real database schema.
+- `DatabaseFunctionalTest`: Tests the administrative database endpoints against the real database schema, including that `FILE_READ`, `CSVWRITE` and `CREATE ALIAS` are refused.
 
 ### 2.2 Integration & Security
 - `SecurityIntegrationTest`: Verifies the authentication and authorization filters, ensuring that endpoints are protected and departmental restrictions are enforced.
+- `H2ConsoleDefaultProfileTest`: With no profile set, `/h2-console` returns 404 for anonymous users and for `admin/admin`.
+- `H2ConsoleDevProfileTest`: Under `dev`, anonymous requests get 401, `testuser` gets 403, and `admin` gets a 2xx with `X-Frame-Options: SAMEORIGIN`.
+- `ProdProfileSecurityTest`: Under `prod`, `/h2-console` returns 404, no `testuser` exists, and `admin` cannot log in with `admin`.
+- `DataInitializerTest` covers live-mode admin creation: a random password of at least 20 characters, a configured password, a blank password falling back to random, an existing admin left unchanged, and two random passwords differing. It also covers test-mode seeding: an empty database is seeded, existing data is never deleted, `app.seed=true` adds only missing records, and a failing database check seeds nothing.
+- `DataInitializerRestartTest`: Starts the real application twice on a file-based H2 database in a temporary folder. It checks that a restart keeps a user-created SLI and all other data, and that a deleted demo record is restored only with `app.seed=true`, leaving other data unchanged.
 - `MeloSloApplicationTests`: A simple sanity check to ensure the Spring application context loads correctly.
 
 ## 3. Running Tests

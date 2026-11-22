@@ -1,6 +1,8 @@
 package com.example.meloslo;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 
@@ -20,26 +22,22 @@ public class DatabaseFunctionalTest extends BaseFunctionalTest {
         assertThat(response.getBody()).contains("MELO_USERS");
     }
 
-    @Test
-    void shouldExecuteSelectQuery() {
+    @ParameterizedTest
+    @ValueSource(strings = {
+        "SELECT FILE_READ('/etc/passwd')",
+        "SELECT CSVWRITE('/tmp/meloslo.csv','SELECT 1')",
+        "CREATE ALIAS EXEC AS 'String e(String c) throws Exception { return c; }'"
+    })
+    void queryEndpointIsGone(String sql) {
         Map<String, String> request = new HashMap<>();
-        request.put("sql", "SELECT * FROM MELO_USERS");
-        
-        ResponseEntity<List> response = adminAuth().postForEntity("/api/v1/database/query", request, List.class);
-        
-        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
-        assertThat(response.getBody()).isNotEmpty();
-    }
+        request.put("sql", sql);
 
-    @Test
-    void shouldRejectNonSelectQuery() {
-        Map<String, String> request = new HashMap<>();
-        request.put("sql", "DELETE FROM MELO_USERS");
-        
-        ResponseEntity<Map> response = adminAuth().postForEntity("/api/v1/database/query", request, Map.class);
-        
-        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
-        assertThat(response.getBody().get("message")).isEqualTo("Only SELECT queries are allowed for security reasons.");
+        ResponseEntity<String> response = adminAuth().postForEntity("/api/v1/database/query", request, String.class);
+
+        assertThat(response.getStatusCode().is4xxClientError()).isTrue();
+        if (response.getBody() != null) {
+            assertThat(response.getBody()).doesNotContain("root:");
+        }
     }
 
     @Test

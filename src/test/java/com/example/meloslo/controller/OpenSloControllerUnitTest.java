@@ -14,6 +14,7 @@ import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.web.servlet.MockMvc;
 
@@ -22,6 +23,7 @@ import java.util.Optional;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
@@ -147,5 +149,51 @@ public class OpenSloControllerUnitTest {
     void shouldDeleteRecord() throws Exception {
         mockMvc.perform(delete("/api/v1/openslo/1"))
                 .andExpect(status().isNoContent());
+    }
+
+    @Test
+    void shouldReturnForbiddenWhenCreatingInForeignDepartment() throws Exception {
+        when(service.createRecord(any(OpenSlo.class))).thenThrow(new AccessDeniedException("no"));
+
+        mockMvc.perform(post("/api/v1/openslo")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(slo)))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void shouldReturnBadRequestWhenCreatingWithId() throws Exception {
+        when(service.createRecord(any(OpenSlo.class))).thenThrow(new IllegalArgumentException("id"));
+
+        mockMvc.perform(post("/api/v1/openslo")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(slo)))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void shouldReturnForbiddenWhenMovingRecordToForeignDepartment() throws Exception {
+        when(service.updateRecord(eq(1L), any(OpenSlo.class))).thenThrow(new AccessDeniedException("no"));
+
+        mockMvc.perform(put("/api/v1/openslo/1")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(slo)))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void shouldReturnNotFoundWhenDeletingUnknownOrForeignRecord() throws Exception {
+        doThrow(new RuntimeException("not found")).when(service).deleteRecord(99L);
+
+        mockMvc.perform(delete("/api/v1/openslo/99"))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void shouldReturnForbiddenWhenDeleteIsDenied() throws Exception {
+        doThrow(new AccessDeniedException("no")).when(service).deleteRecord(98L);
+
+        mockMvc.perform(delete("/api/v1/openslo/98"))
+                .andExpect(status().isForbidden());
     }
 }

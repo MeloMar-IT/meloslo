@@ -66,6 +66,12 @@ public class OpenSlo {
 
     private LocalDateTime lastAlertTime;
 
+    // Last failed metric fetch for this SLI (system-managed, nullable)
+    private LocalDateTime lastFetchFailureTime;
+
+    @Column(length = 500)
+    private String lastFetchError;
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "service_id")
     @JsonIgnoreProperties({"slos", "slis", "indicatorSlis"})
@@ -228,6 +234,22 @@ public class OpenSlo {
 
     public void setLastAlertTime(LocalDateTime lastAlertTime) {
         this.lastAlertTime = lastAlertTime;
+    }
+
+    public LocalDateTime getLastFetchFailureTime() {
+        return lastFetchFailureTime;
+    }
+
+    public void setLastFetchFailureTime(LocalDateTime lastFetchFailureTime) {
+        this.lastFetchFailureTime = lastFetchFailureTime;
+    }
+
+    public String getLastFetchError() {
+        return lastFetchError;
+    }
+
+    public void setLastFetchError(String lastFetchError) {
+        this.lastFetchError = lastFetchError;
     }
 
     public OpenSlo getAlertingSource() {
