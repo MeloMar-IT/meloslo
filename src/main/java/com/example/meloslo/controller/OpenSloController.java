@@ -5,6 +5,7 @@ import com.example.meloslo.dto.BusinessServiceReport;
 import com.example.meloslo.dto.SliReport;
 import com.example.meloslo.dto.SloReport;
 import com.example.meloslo.model.OpenSlo;
+import com.example.meloslo.service.InvalidSliValueException;
 import com.example.meloslo.service.OpenSloService;
 import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -13,6 +14,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/v1/openslo")
@@ -83,6 +85,8 @@ public class OpenSloController {
         try {
             OpenSlo updated = service.updateRecord(id, record);
             return ResponseEntity.ok(updated);
+        } catch (InvalidSliValueException e) {
+            throw e;
         } catch (RuntimeException e) {
             return ResponseEntity.notFound().build();
         }
@@ -92,5 +96,11 @@ public class OpenSloController {
     public ResponseEntity<Void> deleteRecord(@PathVariable Long id) {
         service.deleteRecord(id);
         return ResponseEntity.noContent().build();
+    }
+
+    /** Maps a refused SLO target or SLI value to 400 Bad Request with a {@code message} field. */
+    @ExceptionHandler(InvalidSliValueException.class)
+    public ResponseEntity<Map<String, String>> handleInvalidSliValue(InvalidSliValueException e) {
+        return new ResponseEntity<>(Map.of("message", e.getMessage()), HttpStatus.BAD_REQUEST);
     }
 }

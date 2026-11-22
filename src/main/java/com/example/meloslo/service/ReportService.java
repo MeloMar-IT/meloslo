@@ -207,10 +207,15 @@ public class ReportService {
                     Map<LocalDateTime, Double> aggregatedData = getAggregatedDataWithZeros(allServiceMetrics, since, now, calculateChronoUnit(since, now));
                     
                     double totalTarget = 0;
+                    int targetCount = 0;
                     for (OpenSlo slo : slos) {
-                        totalTarget += openSloService.parseTargetFromSpec(slo.getSpec());
+                        Double t = openSloService.parseTargetFromSpec(slo.getSpec());
+                        if (t != null) {
+                            totalTarget += t;
+                            targetCount++;
+                        }
                     }
-                    double serviceTarget = totalTarget / slos.size();
+                    Double serviceTarget = targetCount > 0 ? totalTarget / targetCount : null;
                     
                     Image serviceChart = generateChartImage(record.getDisplayName() + " Aggregated Performance", aggregatedData, serviceTarget, null, "Performance (%)");
                     if (serviceChart != null) {
@@ -235,8 +240,9 @@ public class ReportService {
         
         document.add(new Paragraph("SLO Performance: " + slo.getDisplayName(), boldFont));
         
-        double target = openSloService.parseTargetFromSpec(slo.getSpec());
-        
+        // Null when the stored target is invalid: the SLO is then reported as Unknown
+        Double target = openSloService.parseTargetFromSpec(slo.getSpec());
+
         List<SliMetric> allMetrics = new ArrayList<>();
         if (slo.getSlis() != null) {
             for (OpenSlo sli : slo.getSlis()) {
@@ -254,12 +260,15 @@ public class ReportService {
                 .average()
                 .orElse(0.0);
         
-        double errorBudget = (1.0 - target > 0) ? (avgValue - target) / (1.0 - target) * 100 : 100.0;
+        Double errorBudget = target == null ? null : SliScale.errorBudget(avgValue, target);
 
         if (options.isIncludeSloDetails()) {
             String statusText = "BREACHING";
             Color statusColor = Color.RED;
-            if (errorBudget >= 25) {
+            if (errorBudget == null) {
+                statusText = "UNKNOWN";
+                statusColor = Color.GRAY;
+            } else if (errorBudget >= 25) {
                 statusText = "HEALTHY";
                 statusColor = new Color(0, 128, 0);
             } else if (errorBudget >= 0) {
@@ -279,18 +288,18 @@ public class ReportService {
 
             if (options.isIncludeTarget()) {
                 table.addCell("Target");
-                table.addCell(String.format("%.4f%%", target * 100));
+                table.addCell(target == null ? "N/A" : String.format("%.4f%%", target));
             }
 
             if (options.isIncludeAvgPerformance()) {
                 String timeLabel = options.getTimeValue() + " " + options.getTimeUnit().toLowerCase();
                 table.addCell("Average Performance (" + timeLabel + ")");
-                table.addCell(String.format("%.4f%%", avgValue * 100));
+                table.addCell(String.format("%.4f%%", avgValue));
             }
 
             if (options.isIncludeErrorBudget()) {
                 table.addCell("Error Budget Remaining");
-                table.addCell(String.format("%.2f%%", errorBudget));
+                table.addCell(errorBudget == null ? "N/A" : String.format("%.2f%%", errorBudget));
             }
 
             if (options.isIncludeStatus()) {
@@ -313,11 +322,10 @@ public class ReportService {
                 }
             }
 
-            if (options.isIncludeErrorBudgetChart()) {
+            if (options.isIncludeErrorBudgetChart() && target != null) {
                 Map<LocalDateTime, Double> ebData = new TreeMap<>();
                 chartData.forEach((dt, val) -> {
-                    double eb = (1.0 - target > 0) ? (val - target) / (1.0 - target) * 100 : 100.0;
-                    ebData.put(dt, eb);
+                    ebData.put(dt, SliScale.errorBudget(val, target));
                 });
                 
                 // Calculate Trend
@@ -394,12 +402,10 @@ public class ReportService {
         for (Map.Entry<LocalDateTime, Double> entry : sortedData.entrySet()) {
             Date date = Date.from(entry.getKey().atZone(ZoneId.systemDefault()).toInstant());
             double val = entry.getValue();
-            if ("Performance (%)".equals(yAxisLabel)) val *= 100;
-            
+
             series.addOrUpdate(new Second(date), val);
             if (target != null) {
                 double t = target;
-                if ("Performance (%)".equals(yAxisLabel)) t *= 100;
                 targetSeries.addOrUpdate(new Second(date), t);
                 baseSeries.addOrUpdate(new Second(date), Math.min(val, t));
             }
@@ -445,7 +451,6 @@ public class ReportService {
 
             if (target != null) {
                 double t = target;
-                if ("Performance (%)".equals(yAxisLabel)) t *= 100;
                 ValueMarker marker = new ValueMarker(t);
                 marker.setPaint(new Color(16, 185, 129));
                 marker.setStroke(new java.awt.BasicStroke(2.0f));

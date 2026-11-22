@@ -171,7 +171,7 @@ public class OpenSloServiceTest {
     void shouldGetSliReport() {
         OpenSlo sli = new OpenSlo("openslo/v1", "SLI", "TestSLI", "Test SLI", "{}");
         sli.setId(2L);
-        SliMetric metric = new SliMetric(java.time.LocalDateTime.now(), 0.95, sli, null);
+        SliMetric metric = new SliMetric(java.time.LocalDateTime.now(), 95.0, sli, null);
 
         when(repository.findById(2L)).thenReturn(Optional.of(sli));
         when(metricRepository.findBySliOrderByTimestampDesc(sli)).thenReturn(Arrays.asList(metric));
@@ -180,7 +180,7 @@ public class OpenSloServiceTest {
 
         assertThat(report).isNotNull();
         assertThat(report.getName()).isEqualTo("TestSLI");
-        assertThat(report.getCurrentValue()).isEqualTo(0.95);
+        assertThat(report.getCurrentValue()).isEqualTo(95.0);
         assertThat(report.getRecentMetrics()).hasSize(1);
     }
 
@@ -204,6 +204,7 @@ public class OpenSloServiceTest {
     @Test
     void shouldCreateMetric() {
         SliMetric metric = new SliMetric();
+        metric.setValue(99.0); // a value is required and must be within 0 to 100
         when(metricRepository.save(metric)).thenReturn(metric);
 
         SliMetric created = service.createMetric(metric);
@@ -258,7 +259,7 @@ public class OpenSloServiceTest {
         when(repository.findByKind("BusinessService")).thenReturn(Arrays.asList(serviceRecord));
         when(repository.findByKind("SLO")).thenReturn(Arrays.asList(sloRecord));
         
-        when(metricRepository.findBySliAndTimestampAfterOrderByTimestampDesc(any(), any())).thenReturn(Arrays.asList(new SliMetric(null, 0.98, null, null)));
+        when(metricRepository.findBySliAndTimestampAfterOrderByTimestampDesc(any(), any())).thenReturn(Arrays.asList(new SliMetric(null, 98.0, null, null)));
 
         DashboardStats stats = service.getDashboardStats();
 
@@ -279,9 +280,9 @@ public class OpenSloServiceTest {
         when(repository.findByKind("BusinessService")).thenReturn(Arrays.asList(serviceRecord));
         when(repository.findByKind("SLO")).thenReturn(Arrays.asList(sloRecord));
         
-        // Target 0.95, value 0.955 -> error budget = (0.955 - 0.95) / (1 - 0.95) * 100 = 0.005 / 0.05 * 100 = 10%
+        // Target 95, value 95.5 -> error budget = (95.5 - 95) / (100 - 95) * 100 = 10%
         // 10% is Warning (0-25)
-        when(metricRepository.findBySliAndTimestampAfterOrderByTimestampDesc(any(), any())).thenReturn(Arrays.asList(new SliMetric(null, 0.955, null, null)));
+        when(metricRepository.findBySliAndTimestampAfterOrderByTimestampDesc(any(), any())).thenReturn(Arrays.asList(new SliMetric(null, 95.5, null, null)));
 
         DashboardStats stats = service.getDashboardStats();
 
@@ -300,9 +301,9 @@ public class OpenSloServiceTest {
         when(repository.findByKind("BusinessService")).thenReturn(Arrays.asList(serviceRecord));
         when(repository.findByKind("SLO")).thenReturn(Arrays.asList(sloRecord));
         
-        // Target 0.95, value 0.94 -> error budget = (0.94 - 0.95) / (1 - 0.95) * 100 = -0.01 / 0.05 * 100 = -20%
+        // Target 95, value 94 -> error budget = (94 - 95) / (100 - 95) * 100 = -20%
         // -20% is Breaching (<0)
-        when(metricRepository.findBySliAndTimestampAfterOrderByTimestampDesc(any(), any())).thenReturn(Arrays.asList(new SliMetric(null, 0.94, null, null)));
+        when(metricRepository.findBySliAndTimestampAfterOrderByTimestampDesc(any(), any())).thenReturn(Arrays.asList(new SliMetric(null, 94.0, null, null)));
 
         DashboardStats stats = service.getDashboardStats();
 
@@ -320,13 +321,13 @@ public class OpenSloServiceTest {
         serviceRecord.setSlos(Arrays.asList(sloRecord));
 
         when(repository.findAll()).thenReturn(Arrays.asList(serviceRecord));
-        when(metricRepository.findBySliAndTimestampAfterOrderByTimestampDesc(any(), any())).thenReturn(Arrays.asList(new SliMetric(null, 0.98, null, null)));
+        when(metricRepository.findBySliAndTimestampAfterOrderByTimestampDesc(any(), any())).thenReturn(Arrays.asList(new SliMetric(null, 98.0, null, null)));
 
         List<OpenSlo> results = service.getAllRecords();
 
         assertThat(results).hasSize(1);
         OpenSlo result = results.get(0);
-        assertThat(result.getCurrentValue()).isCloseTo(0.98, within(0.001));
+        assertThat(result.getCurrentValue()).isCloseTo(98.0, within(0.001));
         assertThat(result.getStatus()).isEqualTo("Healthy");
         assertThat(result.getErrorBudget()).isNotNull();
     }
@@ -334,12 +335,89 @@ public class OpenSloServiceTest {
     @Test
     void shouldParseTargetFromSpec() {
         String spec = "spec:\n  objectives:\n    - target: 0.999";
-        assertThat(service.parseTargetFromSpec(spec)).isEqualTo(0.999);
+        assertThat(service.parseTargetFromSpec(spec)).isEqualTo(99.9);
 
         String noTargetSpec = "spec:\n  objectives: []";
-        assertThat(service.parseTargetFromSpec(noTargetSpec)).isEqualTo(0.99); // Default value
+        assertThat(service.parseTargetFromSpec(noTargetSpec)).isEqualTo(99.0); // Default value
 
-        assertThat(service.parseTargetFromSpec(null)).isEqualTo(0.99);
+        assertThat(service.parseTargetFromSpec(null)).isEqualTo(99.0);
+        assertThat(service.parseTargetFromSpec("spec:\n  objectives:\n    - targetPercent: 99.9")).isEqualTo(99.9);
+    }
+
+    @Test
+    void shouldReturnNullTargetForInvalidStoredSpec() {
+        assertThat(service.parseTargetFromSpec("spec:\n  objectives:\n    - target: 99.9")).isNull();
+    }
+
+    @Test
+    void shouldGiveIssueScenarioErrorBudgetOf50Percent() {
+        OpenSlo sli = new OpenSlo("openslo/v1", "SLI", "TestSLI", "Test SLI", "{}");
+        OpenSlo sloRecord = new OpenSlo("openslo/v1", "SLO", "TestSLO", "Test SLO", "spec:\n  objectives:\n    - target: 0.99");
+        sloRecord.setSlis(Arrays.asList(sli));
+        when(metricRepository.findBySliAndTimestampAfterOrderByTimestampDesc(any(), any()))
+                .thenReturn(Arrays.asList(new SliMetric(null, 99.5, null, null)));
+
+        com.example.meloslo.dto.SloReport report = service.calculateSloReport(sloRecord);
+
+        assertThat(report.getTarget()).isCloseTo(99.0, within(1e-9));
+        assertThat(report.getErrorBudget()).isCloseTo(50.0, within(1e-9));
+        assertThat(report.getStatus()).isEqualTo("Healthy");
+    }
+
+    @Test
+    void shouldReportUnknownForInvalidStoredTargetEvenWithHighValue() {
+        OpenSlo sli = new OpenSlo("openslo/v1", "SLI", "TestSLI", "Test SLI", "{}");
+        OpenSlo sloRecord = new OpenSlo("openslo/v1", "SLO", "TestSLO", "Test SLO", "spec:\n  objectives:\n    - target: 99.9");
+        sloRecord.setSlis(Arrays.asList(sli));
+        sli.setId(5L);
+        when(metricRepository.findBySliAndTimestampAfterOrderByTimestampDesc(any(), any()))
+                .thenReturn(Arrays.asList(new SliMetric(null, 99.5, null, null)));
+
+        com.example.meloslo.dto.SloReport report = service.calculateSloReport(sloRecord);
+        assertThat(report.getStatus()).isEqualTo("Unknown");
+        assertThat(report.getTarget()).isNull();
+        assertThat(report.getErrorBudget()).isNull();
+
+        SliMetric m = new SliMetric(java.time.LocalDateTime.now(), 99.5, sli, null);
+        when(metricRepository.findBySliInAndTimestampAfterOrderByTimestampDesc(any(), any())).thenReturn(Arrays.asList(m));
+        List<OpenSlo> list = Arrays.asList(sloRecord);
+        service.populateTransientFieldsForList(list);
+        assertThat(sloRecord.getStatus()).isEqualTo("Unknown");
+        assertThat(sloRecord.getTarget()).isNull();
+    }
+
+    @Test
+    void shouldSetTargetInListEvenWithoutLinkedSlis() {
+        OpenSlo sloRecord = new OpenSlo("openslo/v1", "SLO", "TestSLO", "Test SLO", "spec:\n  objectives:\n    - target: 0.95");
+
+        service.populateTransientFieldsForList(Arrays.asList(sloRecord));
+
+        assertThat(sloRecord.getTarget()).isCloseTo(95.0, within(1e-9));
+    }
+
+    @Test
+    void shouldRejectOutOfRangeMetricWithoutSaving() {
+        assertThrows(InvalidSliValueException.class,
+                () -> service.createMetric(new SliMetric(java.time.LocalDateTime.now(), 150.0, null, null)));
+        verify(metricRepository, never()).save(any());
+    }
+
+    @Test
+    void shouldRejectInvalidSloTargetsOnCreateAndUpdate() {
+        OpenSlo bad = new OpenSlo("openslo/v1", "SLO", "Bad", "Bad", "spec:\n  objectives:\n    - target: 99.9");
+        OpenSlo badSecond = new OpenSlo("openslo/v1", "SLO", "Bad2", "Bad2",
+                "spec:\n  objectives:\n    - target: 0.99\n    - targetPercent: 100");
+        assertThrows(InvalidSliValueException.class, () -> service.createRecord(bad));
+        assertThrows(InvalidSliValueException.class, () -> service.createRecord(badSecond));
+        assertThrows(InvalidSliValueException.class, () -> service.updateRecord(1L, bad));
+        verify(repository, never()).save(any());
+    }
+
+    @Test
+    void shouldNotValidateTargetsOfNonSloKinds() {
+        OpenSlo sli = new OpenSlo("openslo/v1", "SLI", "Sli", "Sli", "spec:\n  objectives:\n    - target: 99.9");
+        when(repository.save(sli)).thenReturn(sli);
+        assertThat(service.createRecord(sli)).isSameAs(sli);
     }
 
     @Test

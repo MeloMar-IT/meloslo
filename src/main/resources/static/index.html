@@ -253,7 +253,7 @@
                                         </td>
                                         <td class="px-6 py-4">
                                             <span class="text-sm font-bold text-slate-700">
-                                                {{ slo.currentValue ? (slo.currentValue * 100).toFixed(3) : 'N/A' }}%
+                                                {{ slo.currentValue != null ? slo.currentValue.toFixed(3) : 'N/A' }}%
                                             </span>
                                         </td>
                                         <td class="px-6 py-4">
@@ -300,7 +300,7 @@
                                         </td>
                                         <td class="px-6 py-4">
                                             <span class="text-sm font-bold text-slate-700">
-                                                {{ service.currentValue ? (service.currentValue * 100).toFixed(3) : '100.000' }}%
+                                                {{ service.currentValue != null ? service.currentValue.toFixed(3) : '100.000' }}%
                                             </span>
                                         </td>
                                         <td class="px-6 py-4">
@@ -356,14 +356,14 @@
                                         </td>
                                         <td class="px-6 py-4">
                                             <div class="text-sm font-medium text-slate-700" v-if="getSpecField(slo.spec, 'objectives')">
-                                                {{ (getSpecField(slo.spec, 'objectives')[0].ratioMetrics?.target * 100) || 'N/A' }}% / 
+                                                {{ slo.target != null ? slo.target.toFixed(2) : 'N/A' }}% / 
                                                 {{ getSpecField(slo.spec, 'timeWindow') ? getSpecField(slo.spec, 'timeWindow')[0].duration : '30d' }}
                                             </div>
                                             <div class="text-xs text-slate-400" v-else>No objectives set</div>
                                         </td>
                                         <td class="px-6 py-4">
                                             <span class="text-sm font-bold text-slate-700">
-                                                {{ slo.currentValue ? (slo.currentValue * 100).toFixed(3) : 'N/A' }}%
+                                                {{ slo.currentValue != null ? slo.currentValue.toFixed(3) : 'N/A' }}%
                                             </span>
                                         </td>
                                         <td class="px-6 py-4">
@@ -473,7 +473,7 @@
                                         <div class="flex justify-between items-center">
                                             <span class="text-slate-500">Current Average:</span>
                                             <span class="font-bold text-lg text-blue-600">
-                                                {{ (selectedSliReport.currentValue * 100).toFixed(3) }}%
+                                                {{ selectedSliReport.currentValue.toFixed(3) }}%
                                             </span>
                                         </div>
                                     </div>
@@ -495,7 +495,7 @@
                                             <tbody class="divide-y divide-slate-100">
                                                 <tr v-for="m in selectedSliReport.recentMetrics.slice(0, 10)" :key="m.id">
                                                     <td class="py-2 px-2 text-slate-600">{{ new Date(m.timestamp).toLocaleString() }}</td>
-                                                    <td class="py-2 px-2 text-right font-medium">{{ (m.value * 100).toFixed(2) }}%</td>
+                                                    <td class="py-2 px-2 text-right font-medium">{{ m.value.toFixed(2) }}%</td>
                                                 </tr>
                                             </tbody>
                                         </table>
@@ -556,25 +556,25 @@
                                 <div class="flex justify-between items-start mb-4">
                                     <div>
                                         <h4 class="font-bold text-slate-800">{{ report.name }}</h4>
-                                        <p class="text-xs text-slate-500">Target: {{ (report.target * 100).toFixed(2) }}%</p>
+                                        <p class="text-xs text-slate-500">Target: {{ report.target != null ? report.target.toFixed(2) + '%' : 'N/A (invalid target)' }}</p>
                                     </div>
-                                    <span :class="report.currentValue >= report.target ? 'text-green-600' : 'text-red-600'" class="flex items-center text-sm font-bold">
+                                    <span :class="report.target != null && report.currentValue >= report.target ? 'text-green-600' : 'text-red-600'" class="flex items-center text-sm font-bold">
                                         <i class="fas fa-circle text-[8px] mr-1.5"></i>
-                                        {{ (report.currentValue * 100).toFixed(3) }}%
+                                        {{ report.currentValue.toFixed(3) }}%
                                     </span>
                                 </div>
                                 
                                 <div class="space-y-3">
                                     <div class="flex justify-between text-xs">
                                         <span class="text-slate-500">Error Budget:</span>
-                                        <span :class="report.errorBudget > 0 ? 'text-blue-600' : 'text-red-600'" class="font-bold">
-                                            {{ report.errorBudget.toFixed(2) }}%
+                                        <span :class="report.errorBudget == null ? 'text-slate-500' : (report.errorBudget > 0 ? 'text-blue-600' : 'text-red-600')" class="font-bold">
+                                            {{ report.errorBudget != null ? report.errorBudget.toFixed(2) + '%' : 'Unknown' }}
                                         </span>
                                     </div>
                                     <div class="w-full bg-slate-100 rounded-full h-1.5 overflow-hidden">
-                                        <div class="h-full rounded-full transition-all duration-500" 
-                                             :class="report.errorBudget > 20 ? 'bg-blue-500' : (report.errorBudget > 0 ? 'bg-yellow-500' : 'bg-red-500')"
-                                             :style="{ width: Math.max(0, Math.min(100, report.errorBudget)) + '%' }"></div>
+                                        <div class="h-full rounded-full transition-all duration-500"
+                                             :class="report.errorBudget == null ? 'bg-slate-300' : (report.errorBudget > 20 ? 'bg-blue-500' : (report.errorBudget > 0 ? 'bg-yellow-500' : 'bg-red-500'))"
+                                             :style="{ width: report.errorBudget == null ? '0%' : Math.max(0, Math.min(100, report.errorBudget)) + '%' }"></div>
                                     </div>
                                     <div class="pt-2 flex justify-end">
                                         <button @click="viewDetails(slos.find(s => s.name === report.name))" class="text-xs text-blue-600 font-medium hover:underline">
@@ -728,22 +728,22 @@
                                         </div>
                                         <div class="flex justify-between items-center">
                                             <span class="text-slate-500">Current Value:</span>
-                                            <span class="font-bold text-lg" :class="selectedSloReport.currentValue >= selectedSloReport.target ? 'text-green-600' : 'text-red-600'">
-                                                {{ (selectedSloReport.currentValue * 100).toFixed(3) }}%
+                                            <span class="font-bold text-lg" :class="selectedSloReport.target != null && selectedSloReport.currentValue >= selectedSloReport.target ? 'text-green-600' : 'text-red-600'">
+                                                {{ selectedSloReport.currentValue.toFixed(3) }}%
                                             </span>
                                         </div>
                                         <div class="flex justify-between items-center">
                                             <span class="text-slate-500">Target:</span>
-                                            <span class="font-medium">{{ (selectedSloReport.target * 100).toFixed(2) }}%</span>
+                                            <span class="font-medium">{{ selectedSloReport.target != null ? selectedSloReport.target.toFixed(2) + '%' : 'N/A (invalid target)' }}</span>
                                         </div>
                                         <div class="flex justify-between items-center">
                                             <span class="text-slate-500">Error Budget:</span>
-                                            <span class="font-bold" :class="selectedSloReport.errorBudget >= 0 ? 'text-blue-600' : 'text-red-600'">
-                                                {{ selectedSloReport.errorBudget.toFixed(2) }}%
+                                            <span class="font-bold" :class="selectedSloReport.errorBudget == null ? 'text-slate-500' : (selectedSloReport.errorBudget >= 0 ? 'text-blue-600' : 'text-red-600')">
+                                                {{ selectedSloReport.errorBudget != null ? selectedSloReport.errorBudget.toFixed(2) + '%' : 'Unknown' }}
                                             </span>
                                         </div>
                                         <div class="w-full bg-slate-100 rounded-full h-2 mt-2">
-                                            <div class="bg-blue-600 h-2 rounded-full" :style="{ width: Math.max(0, Math.min(100, selectedSloReport.errorBudget)) + '%' }"></div>
+                                            <div class="bg-blue-600 h-2 rounded-full" :style="{ width: selectedSloReport.errorBudget == null ? '0%' : Math.max(0, Math.min(100, selectedSloReport.errorBudget)) + '%' }"></div>
                                         </div>
                                     </div>
                                     <div v-else class="flex justify-center py-4">
@@ -764,7 +764,7 @@
                                             <tbody class="divide-y divide-slate-100">
                                                 <tr v-for="m in selectedSloReport.recentMetrics.slice(0, 10)" :key="m.id">
                                                     <td class="py-2 px-2 text-slate-600">{{ new Date(m.timestamp).toLocaleString() }}</td>
-                                                    <td class="py-2 px-2 text-right font-medium">{{ (m.value * 100).toFixed(2) }}%</td>
+                                                    <td class="py-2 px-2 text-right font-medium">{{ m.value.toFixed(2) }}%</td>
                                                 </tr>
                                             </tbody>
                                         </table>
@@ -1959,7 +1959,7 @@ spec:
                         description: 'Get an aggregated health report for all SLOs in a Service.',
                         usage: 'Aggregates metrics and status for every SLO associated with the given Service ID.',
                         requestJson: null,
-                        responseJson: '{\n  "serviceName": "Web API",\n  "sloReports": [\n    {\n      "sloName": "API Latency",\n      "currentValue": 0.95,\n      "target": 0.99,\n      "status": "Warning",\n      ...\n    }\n  ]\n}'
+                        responseJson: '{\n  "serviceName": "Web API",\n  "sloReports": [\n    {\n      "sloName": "API Latency",\n      "currentValue": 95.0,\n      "target": 99.0,\n      "status": "Warning",\n      ...\n    }\n  ]\n}'
                     },
                     {
                         method: 'GET',
@@ -2665,13 +2665,13 @@ spec:
                                 data: sloValues.map(v => v.toFixed(3))
                             });
                             categories = historicalLabels;
-                            targetValue = report.target !== undefined ? report.target * 100 : null;
+                            targetValue = report.target !== undefined ? report.target : null;
                         }
                         // Calculate error budget points for the main series if it's an SLO chart
-                        else if (selector === '#chart' && report.target !== undefined) {
+                        else if (selector === '#chart' && report.target != null) {
                             const target = report.target;
                             const ebValues = report.recentMetrics.map(m => {
-                                const eb = (1.0 - target > 0) ? (m.value - target) / (1.0 - target) * 100 : 100.0;
+                                const eb = (100 - target > 0) ? (m.value - target) / (100 - target) * 100 : 100.0;
                                 return eb.toFixed(2);
                             }).reverse();
                             
@@ -2702,14 +2702,14 @@ spec:
                                 }
                             }
                         } else {
-                            const sliValues = report.recentMetrics ? report.recentMetrics.map(m => (m.value * 100).toFixed(2)).reverse() : [];
+                            const sliValues = report.recentMetrics ? report.recentMetrics.map(m => m.value.toFixed(2)).reverse() : [];
                             series.push({
                                 name: 'SLI Value (%)',
                                 data: sliValues
                             });
                             categories = timestamps;
                             if (report.target !== undefined && report.target !== null) {
-                                targetValue = report.target * 100;
+                                targetValue = report.target;
                             }
                         }
                     } else {

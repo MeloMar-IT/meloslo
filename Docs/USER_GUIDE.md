@@ -76,7 +76,7 @@ The **Business Services** view allows you to manage logical collections of SLOs 
 ![Services View](Screenshots/Screenshot%202026-04-06%20at%2008.42.54.png)
 
 ### 3.2 Service Level Indicators (SLIs)
-SLIs define the metrics that measure the performance of your services. All SLI values in MeloSlo are normalized to a range of **0 to 100**.
+SLIs define the metrics that measure the performance of your services. All SLI values in MeloSlo are on a scale of **0 to 100**. Values outside this range, or values that are not numbers, are refused.
 
 ![SLI Management](Screenshots/Screenshot%202026-04-06%20at%2008.43.15.png)
 
@@ -87,6 +87,8 @@ SLOs define your performance targets. You can view detailed information about ea
 
 #### 3.3.1 Creating/Editing an SLO
 When creating or editing an SLO, you can use the sidebar to navigate and the top right button to initiate the creation process.
+
+The SLO target is written either as a fraction strictly between 0 and 1 (for example `target: 0.999`, which means 99.9%) or as `targetPercent` strictly between 0 and 100 (for example `targetPercent: 99.9`). A target outside these ranges, or one that sets more than one target field, is refused when you save.
 
 #### 3.3.2 SLO Details & Charts
 MeloSlo provides visualization of performance history and error budget consumption for each SLO.

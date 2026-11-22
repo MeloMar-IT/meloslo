@@ -25,7 +25,7 @@ OpenSLO is an open-source specification for defining Service Level Objectives (S
 ### Core Concepts
 
 1.  **Business Service**: A logical collection of SLOs. It represents a system or component.
-2.  **SLI (Service Level Indicator)**: A metric that measures some aspect of the service (e.g., latency, availability). **Important**: All SLI metric values must be in the range of **0 to 100**.
+2.  **SLI (Service Level Indicator)**: A metric that measures some aspect of the service (e.g., latency, availability). **Important**: All SLI metric values must be in the range of **0 to 100** (inclusive). A value that is missing, not a number, or outside this range is refused with HTTP 400. SLO targets are written as a fraction (`0.999`, meaning 99.9%) or as `targetPercent` (`99.9`); see [SLO Status and Error Budget](#slo-status-and-error-budget).
 3.  **SLO (Service Level Objective)**: A target value or range of values for an SLI that defines the expected level of service.
 4.  **Error Budget**: The amount of service unreliability that is allowed before the SLO is violated.
 
@@ -165,7 +165,7 @@ MeloSlo supports automated alerting when an SLO enters the **Breaching** status.
 - **Variables**: The payload template supports the following dynamic variables:
     - `${SLO_NAME}`: The display name (or name) of the breaching SLO.
     - `${SLO_STATUS}`: The current status (e.g., "Breaching").
-    - `${SLO_VALUE}`: The current performance value of the SLO (percentage).
+    - `${SLO_VALUE}`: The current performance value of the SLO, as a percentage on the 0 to 100 scale with three decimals (e.g. `97.500`). The dashboard shows the same value with two decimals.
 - **Association**: Each SLO can be linked to one `AlertingSource`.
 - **Trigger**: When the background scheduler fetches metrics and detects that a linked SLO is breaching, it sends a POST request to the configured webhook URL.
 - **Spam Prevention**: To prevent excessive notifications, MeloSlo will only send an alert once every hour for a specific SLO while it remains in a breaching state.
@@ -326,6 +326,7 @@ MeloSlo allows you to generate professional PDF reports for your Services and SL
   - Remaining error budget for the year.
   - Current health status (Healthy, Warning, Breaching) based on the annual performance.
   - Performance graphs with area filling (0 to value) and compliance highlighting (Green/Red).
+  - If an SLO's stored target is invalid, the report shows the target as `N/A`, the error budget as `N/A` and the status as `UNKNOWN`.
 - **Service Aggregation**: If a Service is selected, the report automatically includes all SLOs associated with that service.
 
 ## Startup Verification
@@ -341,7 +342,7 @@ If any of these conditions are not met, the application will automatically reloa
 
 Metrics are stored in the database and linked to an SLI and a DataSource. They represent the actual value of an indicator at a specific point in time.
 
-- **Value Range**: All metric values must be between **0 and 100**.
+- **Value Range**: All metric values must be between **0 and 100** (inclusive). A value that is missing, not a number, or outside this range is refused with `400 Bad Request` and a `message` field. Stored values from the earlier 0 to 1 scale are converted to 0 to 100 once, at startup.
 - `POST /api/v1/metrics`: Create a new metric record.
 - `GET /api/v1/metrics`: Retrieve all metric records.
 
@@ -353,10 +354,15 @@ When viewing the details of an SLO, the application automatically calculates its
   - **Healthy** (Green): Error Budget >= 25%
   - **Warning** (Yellow): Error Budget 0% to 25%
   - **Breaching** (Red): Error Budget < 0%
+  - **Unknown**: The stored target is invalid (see Target below). No error budget is calculated and the SLO is not counted as breaching.
 - **Rolling Window**: By default, calculations are performed over a 30-day rolling window (customizable via `timeWindow` in the SLO specification).
-- **Target**: The target percentage is extracted from the `objectives` section of the SLO specification.
+- **Target**: The target is read from the `objectives` section of the SLO specification, in one of two forms:
+  - `target` or `ratioMetrics.target`: a fraction strictly between 0 and 1, e.g. `0.999`. It is converted to a percentage (99.9) for the calculation.
+  - `targetPercent`: a percentage strictly between 0 and 100, e.g. `99.9`.
+  - If no target is given, 99 (99%) is used.
+  - Each objective may set only one of these fields. A target that is not a number, is outside its range (for example `1.0`, `99.9` in `target`, or `100` in `targetPercent`), or sets more than one target field is refused with `400 Bad Request` when the SLO is created or updated.
 - **Current SLO**: Calculated as the average of all linked SLI metric values within the rolling window.
-- **Error Budget**: Calculated as the remaining percentage of allowed unreliability.
+- **Error Budget**: Calculated as `(current value - target) / (100 - target) * 100`, the share of the allowed unreliability that remains. For example, with target 99.9 and current value 99.95 the budget is 50% (Healthy). With current value 99.5 it is -400% (Breaching). The value is not capped at 0% or 100%.
 
 #### SLO Specification Example with Calculation Parameters
 
@@ -391,10 +397,10 @@ Manage Services, SLIs, SLOs, and DataSources.
   - **Response**: A single OpenSlo object or 404.
 - **`POST /api/v1/openslo`**: Create a new OpenSLO record.
   - **Request Body**: JSON representation of an `OpenSlo` object. Required fields: `apiVersion`, `kind`, `name`, `spec`.
-  - **Response**: The created record (201 Created).
+  - **Response**: The created record (201 Created). Returns `400 Bad Request` with a `message` field if the SLO target is invalid.
 - **`PUT /api/v1/openslo/{id}`**: Update an existing record.
   - **Request Body**: JSON representation of the updated `OpenSlo` object.
-  - **Response**: The updated record.
+  - **Response**: The updated record. Returns `400 Bad Request` with a `message` field if the SLO target is invalid.
 - **`DELETE /api/v1/openslo/{id}`**: Delete a record and its associations.
   - **Response**: 204 No Content.
 - **`GET /api/v1/openslo/{id}/report`**: (SLO records only) Retrieve a comprehensive status report.
@@ -412,7 +418,7 @@ Manage raw performance data.
   - **Response**: List of `SliMetric` objects.
 - **`POST /api/v1/metrics`**: Manually record a new metric value for an SLI.
   - **Request Body**: `SliMetric` object linking to an SLI and DataSource.
-  - **Response**: The created metric (201 Created).
+  - **Response**: The created metric (201 Created). Returns `400 Bad Request` if the value is missing, not a number, or outside 0 to 100.
 
 ### Database Query Tool (`/api/v1/database`) (Administrator Only)
 

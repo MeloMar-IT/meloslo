@@ -111,6 +111,10 @@ public class OpenSlo {
     @Transient
     private Double currentValue;
 
+    /** SLO target on the 0 to 100 scale, as used by the backend calculation. */
+    @Transient
+    private Double target;
+
     public OpenSlo() {
     }
 
@@ -280,6 +284,14 @@ public class OpenSlo {
 
     public void setIndicatorSlis(List<OpenSlo> indicatorSlis) {
         this.indicatorSlis = indicatorSlis;
+    }
+
+    public Double getTarget() {
+        return target;
+    }
+
+    public void setTarget(Double target) {
+        this.target = target;
     }
 
     public Double getErrorBudget() {

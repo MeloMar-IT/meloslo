@@ -64,10 +64,10 @@ class ReportServiceTest {
         when(openSloService.getRecordById(1L)).thenReturn(Optional.of(service));
         when(openSloService.getRecordById(2L)).thenReturn(Optional.of(slo));
         when(openSloService.getCurrentUserDepartments()).thenReturn(Collections.singletonList("Finance"));
-        when(openSloService.parseTargetFromSpec(anyString())).thenReturn(0.95);
+        when(openSloService.parseTargetFromSpec(anyString())).thenReturn(95.0);
         
         List<SliMetric> metrics = new ArrayList<>();
-        metrics.add(new SliMetric(LocalDateTime.now(), 0.98, sli, null));
+        metrics.add(new SliMetric(LocalDateTime.now(), 98.0, sli, null));
         when(metricRepository.findBySliAndTimestampAfterOrderByTimestampDesc(any(), any())).thenReturn(metrics);
 
         ReportOptionsDTO options = new ReportOptionsDTO();
@@ -123,7 +123,7 @@ class ReportServiceTest {
 
         when(openSloService.getRecordById(10L)).thenReturn(Optional.of(slo));
         when(openSloService.getCurrentUserDepartments()).thenReturn(Collections.singletonList("Engineering"));
-        when(openSloService.parseTargetFromSpec(anyString())).thenReturn(0.95);
+        when(openSloService.parseTargetFromSpec(anyString())).thenReturn(95.0);
         when(metricRepository.findBySliAndTimestampAfterOrderByTimestampDesc(any(), any())).thenReturn(new ArrayList<>());
 
         ReportOptionsDTO options = new ReportOptionsDTO();
@@ -147,6 +147,7 @@ class ReportServiceTest {
         slo.setDepartment("Engineering");
         slo.setSpec("target: 0.9");
 
+        when(openSloService.parseTargetFromSpec(anyString())).thenReturn(90.0);
         when(openSloService.getRecordById(20L)).thenReturn(Optional.of(slo));
         when(openSloService.getCurrentUserDepartments()).thenReturn(Collections.emptyList());
         when(metricRepository.findBySliAndTimestampAfterOrderByTimestampDesc(any(), any())).thenReturn(new ArrayList<>());
@@ -183,6 +184,7 @@ class ReportServiceTest {
         slo.setDepartment("Engineering");
         slo.setSpec("target: 0.99");
 
+        when(openSloService.parseTargetFromSpec(anyString())).thenReturn(99.0);
         when(openSloService.getRecordById(30L)).thenReturn(Optional.of(slo));
         when(openSloService.getCurrentUserDepartments()).thenReturn(Collections.emptyList());
         when(metricRepository.findBySliAndTimestampAfterOrderByTimestampDesc(any(), any())).thenReturn(new ArrayList<>());
@@ -230,5 +232,28 @@ class ReportServiceTest {
         assertEquals(595.0f, reader.getPageSize(1).getWidth(), 1.0f);
         assertEquals(842.0f, reader.getPageSize(1).getHeight(), 1.0f);
         reader.close();
+    }
+
+    @Test
+    void shouldGeneratePdfWhenStoredTargetIsInvalid() {
+        OpenSlo slo = new OpenSlo();
+        slo.setId(40L);
+        slo.setKind("SLO");
+        slo.setDisplayName("Invalid Target SLO");
+        slo.setDepartment("Engineering");
+        slo.setSpec("spec: {objectives: [{target: 99.9}]}");
+
+        when(openSloService.getRecordById(40L)).thenReturn(Optional.of(slo));
+        when(openSloService.getCurrentUserDepartments()).thenReturn(Collections.emptyList());
+        when(openSloService.parseTargetFromSpec(anyString())).thenReturn(null);
+        when(metricRepository.findBySliAndTimestampAfterOrderByTimestampDesc(any(), any())).thenReturn(new ArrayList<>());
+
+        ReportOptionsDTO options = new ReportOptionsDTO();
+        options.setIds(List.of(40L));
+
+        byte[] pdf = reportService.generatePdfReport(options);
+
+        assertNotNull(pdf);
+        assertTrue(pdf.length > 0);
     }
 }

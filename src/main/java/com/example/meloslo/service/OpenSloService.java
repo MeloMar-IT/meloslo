@@ -137,6 +137,7 @@ public class OpenSloService {
                 .filter(r -> "SLO".equalsIgnoreCase(r.getKind()))
                 .collect(Collectors.toList());
 
+        slos.forEach(slo -> slo.setTarget(parseTargetFromSpec(slo.getSpec())));
         if (!slos.isEmpty()) {
             // Find all unique SLIs across all SLOs
             List<OpenSlo> allSlis = slos.stream()
@@ -159,7 +160,7 @@ public class OpenSloService {
 
                 // Now populate each SLO using the pre-fetched metrics
                 for (OpenSlo slo : slos) {
-                    double target = parseTargetFromSpec(slo.getSpec());
+                    Double target = slo.getTarget();
                     int windowDays = parseWindowDaysFromSpec(slo.getSpec());
                     LocalDateTime sloWindowStart = LocalDateTime.now().minusDays(windowDays);
 
@@ -171,9 +172,9 @@ public class OpenSloService {
                     double currentSloValue = sloMetrics.stream()
                             .mapToDouble(SliMetric::getValue)
                             .average()
-                            .orElse(1.0);
+                            .orElse(SliScale.MAX_VALUE);
 
-                    double errorBudget = (1.0 - target > 0) ? (currentSloValue - target) / (1.0 - target) * 100 : 100.0;
+                    Double errorBudget = target == null ? null : SliScale.errorBudget(currentSloValue, target);
                     slo.setErrorBudget(errorBudget);
                     slo.setStatus(determineStatus(errorBudget));
                     slo.setCurrentValue(currentSloValue);
@@ -193,25 +194,27 @@ public class OpenSloService {
         if ("SLO".equalsIgnoreCase(record.getKind())) {
             SloReport report = calculateSloReport(record);
             record.setErrorBudget(report.getErrorBudget());
-            record.setStatus(determineStatus(report.getErrorBudget()));
+            record.setStatus(report.getStatus());
             record.setCurrentValue(report.getCurrentValue());
+            record.setTarget(report.getTarget());
         } else if ("BusinessService".equalsIgnoreCase(record.getKind())) {
             List<OpenSlo> childSlos = record.getSlos();
             if (childSlos != null && !childSlos.isEmpty()) {
                 double totalValue = 0;
-                double minErrorBudget = Double.MAX_VALUE;
+                Double minErrorBudget = null;
                 for (OpenSlo slo : childSlos) {
                     SloReport report = calculateSloReport(slo);
                     totalValue += report.getCurrentValue();
-                    if (report.getErrorBudget() < minErrorBudget) {
-                        minErrorBudget = report.getErrorBudget();
+                    Double eb = report.getErrorBudget();
+                    if (eb != null && (minErrorBudget == null || eb < minErrorBudget)) {
+                        minErrorBudget = eb;
                     }
                 }
                 record.setCurrentValue(totalValue / childSlos.size());
                 record.setErrorBudget(minErrorBudget);
                 record.setStatus(determineStatus(minErrorBudget));
             } else {
-                record.setCurrentValue(1.0);
+                record.setCurrentValue(SliScale.MAX_VALUE);
                 record.setErrorBudget(100.0);
                 record.setStatus("Healthy");
             }
@@ -229,11 +232,13 @@ public class OpenSloService {
 
     @Transactional
     public OpenSlo createRecord(OpenSlo record) {
+        validateSloTarget(record);
         return repository.save(record);
     }
 
     @Transactional
     public OpenSlo updateRecord(Long id, OpenSlo updatedRecord) {
+        validateSloTarget(updatedRecord);
         return repository.findById(id)
                 .map(record -> {
                     record.setApiVersion(updatedRecord.getApiVersion());
@@ -278,6 +283,7 @@ public class OpenSloService {
     }
 
     public SliMetric createMetric(SliMetric metric) {
+        SliScale.requireValidValue(metric.getValue());
         return metricRepository.save(metric);
     }
 
@@ -311,8 +317,11 @@ public class OpenSloService {
         int targetCount = 0;
         for (OpenSlo slo : allSlos) {
             if (slo.getSlis() != null && slo.getSlis().contains(sli)) {
-                totalTarget += parseTargetFromSpec(slo.getSpec());
-                targetCount++;
+                Double t = parseTargetFromSpec(slo.getSpec());
+                if (t != null) {
+                    totalTarget += t;
+                    targetCount++;
+                }
             }
         }
         Double avgTarget = targetCount > 0 ? (totalTarget / targetCount) : null;
@@ -349,12 +358,12 @@ public class OpenSloService {
         
         for (OpenSlo slo : filteredSlos) {
             SloReport report = calculateSloReport(slo);
-            String status = determineStatus(report.getErrorBudget());
+            String status = report.getStatus();
             if ("Healthy".equalsIgnoreCase(status)) {
                 healthy++;
             } else if ("Warning".equalsIgnoreCase(status)) {
                 warning++;
-            } else {
+            } else if ("Breaching".equalsIgnoreCase(status)) {
                 breaching++;
             }
         }
@@ -362,8 +371,10 @@ public class OpenSloService {
         return new DashboardStats(filteredServices.size(), filteredSlos.size(), healthy, warning, breaching);
     }
 
-    private String determineStatus(double errorBudget) {
-        if (errorBudget >= 25) {
+    private String determineStatus(Double errorBudget) {
+        if (errorBudget == null) {
+            return "Unknown";
+        } else if (errorBudget >= 25) {
             return "Healthy";
         } else if (errorBudget >= 0) {
             return "Warning";
@@ -374,7 +385,7 @@ public class OpenSloService {
 
     @Transactional(readOnly = true)
     public SloReport calculateSloReport(OpenSlo slo) {
-        double target = parseTargetFromSpec(slo.getSpec());
+        Double target = parseTargetFromSpec(slo.getSpec());
         int windowDays = parseWindowDaysFromSpec(slo.getSpec());
         LocalDateTime windowStart = LocalDateTime.now().minusDays(windowDays);
 
@@ -386,15 +397,15 @@ public class OpenSloService {
         double currentSloValue = allMetrics.stream()
                 .mapToDouble(SliMetric::getValue)
                 .average()
-                .orElse(1.0);
+                .orElse(SliScale.MAX_VALUE);
 
-        double errorBudget = (1.0 - target > 0) ? (currentSloValue - target) / (1.0 - target) * 100 : 100.0;
+        Double errorBudget = target == null ? null : SliScale.errorBudget(currentSloValue, target);
         String status = determineStatus(errorBudget);
 
         List<SliMetric> recentMetrics = allMetrics.size() > 50 ? allMetrics.subList(0, 50) : allMetrics;
 
         // Calculate trend using all available data up to 1 year
-        List<Double> trendPoints = calculateTrendPoints(allMetrics, target, 30);
+        List<Double> trendPoints = target == null ? new ArrayList<>() : calculateTrendPoints(allMetrics, target, 30);
 
         // Calculate 30-day historical SLO values
         List<Double> historicalSloValues = calculateHistoricalSloValues(allMetrics, 30);
@@ -421,7 +432,7 @@ public class OpenSloService {
         // Fill in gaps and ensure we have exactly 'days' points if possible
         for (int i = days - 1; i >= 0; i--) {
             java.time.LocalDate date = now.minusDays(i).toLocalDate();
-            results.add(dailySli.getOrDefault(date, 1.0) * 100.0);
+            results.add(dailySli.getOrDefault(date, SliScale.MAX_VALUE));
         }
 
         return results;
@@ -450,8 +461,7 @@ public class OpenSloService {
         List<Double> y = new ArrayList<>();
         for (java.time.LocalDate date : dates) {
             double sli = dailySli.get(date);
-            double eb = (1.0 - target > 0) ? (sli - target) / (1.0 - target) * 100 : 100.0;
-            y.add(eb);
+            y.add(SliScale.errorBudget(sli, target));
         }
 
         // 3. Meta Prophet-inspired Additive Model: y(t) = g(t) + s(t)
@@ -515,17 +525,21 @@ public class OpenSloService {
         return new BusinessServiceReport(service.getName(), service.getDisplayName(), sloReports);
     }
 
+    /** Target on the 0 to 100 scale; the default when absent; null when a stored target is invalid. */
     public Double parseTargetFromSpec(String spec) {
         try {
-            JsonNode root = yamlMapper.readTree(spec);
-            JsonNode objectives = root.path("spec").path("objectives");
-            if (objectives.isArray() && objectives.size() > 0) {
-                return objectives.get(0).path("target").asDouble(0.99);
-            }
-        } catch (Exception e) {
-            // Default 0.99
+            return SliScale.targetFromYaml(yamlMapper, spec).orElse(SliScale.DEFAULT_TARGET);
+        } catch (InvalidSliValueException e) {
+            log.warn("Ignoring invalid SLO target in stored spec: {}", e.getMessage());
+            return null;
         }
-        return 0.99;
+    }
+
+    /** Refuses SLO specs with invalid targets; other kinds and unparsable YAML are not checked. */
+    public void validateSloTarget(OpenSlo record) {
+        if (record != null && "SLO".equalsIgnoreCase(record.getKind())) {
+            SliScale.targetFromYaml(yamlMapper, record.getSpec());
+        }
     }
 
     public int parseWindowDaysFromSpec(String spec) {
