@@ -20,7 +20,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 @SpringBootTest
 @AutoConfigureMockMvc
-@WithMockUser
+@WithMockUser(username = "admin", roles = "ADMIN")
 public class OpenSloControllerTest {
 
     @Autowired

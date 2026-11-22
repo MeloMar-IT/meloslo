@@ -12,6 +12,8 @@ MeloSlo is an open-source tool provided **"as is" and on your own risk**. The de
 ### 1.1 Authentication
 To access MeloSlo, you must first log in using your credentials. The platform supports role-based access control to ensure that only authorized users can view or manage specific departmental records.
 
+Standard users only see, create, update and delete records in their own departments. Records of other departments are hidden everywhere, including reports and direct links. A user without any department sees no records. Only administrators see records that have no department.
+
 ![Login Screen](Screenshots/Screenshot%202026-04-06%20at%2008.42.34.png)
 
 *   **Default Administrator** (test mode only): `admin` / `admin`

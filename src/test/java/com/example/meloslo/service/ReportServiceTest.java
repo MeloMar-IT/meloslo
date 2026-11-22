@@ -5,6 +5,7 @@ import com.example.meloslo.model.OpenSlo;
 import com.example.meloslo.model.SliMetric;
 import com.example.meloslo.repository.MetricRepository;
 import com.lowagie.text.pdf.PdfReader;
+import com.lowagie.text.pdf.parser.PdfTextExtractor;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mock;
@@ -19,6 +20,7 @@ import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 class ReportServiceTest {
@@ -38,11 +40,11 @@ class ReportServiceTest {
     }
 
     @Test
-    void shouldGeneratePdfReport() {
+    void shouldGeneratePdfReport() throws IOException {
         // Arrange
         OpenSlo service = new OpenSlo();
         service.setId(1L);
-        service.setKind("Service");
+        service.setKind("BusinessService");
         service.setDisplayName("Test Service");
         service.setName("test-service");
         service.setDepartment("Finance");
@@ -50,20 +52,28 @@ class ReportServiceTest {
         OpenSlo slo = new OpenSlo();
         slo.setId(2L);
         slo.setKind("SLO");
-        slo.setDisplayName("Test SLO");
+        slo.setDisplayName("Allowed SLO");
         slo.setName("test-slo");
         slo.setSpec("spec: {objectives: [{target: 0.95}], timeWindow: [{duration: 30d}]}");
         slo.setDepartment("Finance");
-        
+
+        OpenSlo forbidden = new OpenSlo();
+        forbidden.setId(4L);
+        forbidden.setKind("SLO");
+        forbidden.setDisplayName("Forbidden SLO");
+        forbidden.setName("forbidden-slo");
+        forbidden.setSpec("spec: {objectives: [{target: 0.95}], timeWindow: [{duration: 30d}]}");
+        forbidden.setDepartment("Infrastructure");
+
         OpenSlo sli = new OpenSlo();
         sli.setId(3L);
         sli.setKind("SLI");
         slo.setSlis(Collections.singletonList(sli));
-        service.setSlos(Collections.singletonList(slo));
+        service.setSlos(List.of(slo, forbidden));
 
         when(openSloService.getRecordById(1L)).thenReturn(Optional.of(service));
         when(openSloService.getRecordById(2L)).thenReturn(Optional.of(slo));
-        when(openSloService.getCurrentUserDepartments()).thenReturn(Collections.singletonList("Finance"));
+        when(openSloService.getAccessibleSlos(service)).thenReturn(Collections.singletonList(slo));
         when(openSloService.parseTargetFromSpec(anyString())).thenReturn(0.95);
         
         List<SliMetric> metrics = new ArrayList<>();
@@ -84,30 +94,58 @@ class ReportServiceTest {
         assertEquals('P', (char) pdf[1]);
         assertEquals('D', (char) pdf[2]);
         assertEquals('F', (char) pdf[3]);
+
+        String text = pdfText(pdf);
+        assertTrue(text.contains("Allowed SLO"));
+        assertFalse(text.contains("Forbidden SLO"));
+    }
+
+    private String pdfText(byte[] pdf) throws IOException {
+        PdfReader reader = new PdfReader(pdf);
+        try {
+            StringBuilder sb = new StringBuilder();
+            PdfTextExtractor extractor = new PdfTextExtractor(reader);
+            for (int page = 1; page <= reader.getNumberOfPages(); page++) {
+                sb.append(extractor.getTextFromPage(page)).append('\n');
+            }
+            return sb.toString();
+        } finally {
+            reader.close();
+        }
     }
 
     @Test
-    void shouldRespectDepartmentAccess() {
-        // Arrange
-        OpenSlo record = new OpenSlo();
-        record.setId(1L);
-        record.setKind("SLO");
-        record.setDepartment("Secret");
-
-        when(openSloService.getRecordById(1L)).thenReturn(Optional.of(record));
-        when(openSloService.getCurrentUserDepartments()).thenReturn(Collections.singletonList("Public"));
+    void shouldOmitRecordsTheCallerCannotSee() throws IOException {
+        // getRecordById answers empty for records outside the caller's departments
+        when(openSloService.getRecordById(1L)).thenReturn(Optional.empty());
 
         ReportOptionsDTO options = new ReportOptionsDTO();
         options.setIds(List.of(1L));
 
-        // Act
         byte[] pdf = reportService.generatePdfReport(options);
 
-        // Assert
         assertNotNull(pdf);
-        // A PDF with no records will still have header/footer, but should be smaller or different.
-        // Actually, without records it only has the title and date info.
-        assertTrue(pdf.length > 0);
+        assertFalse(pdfText(pdf).contains("Secret SLO"));
+        verifyNoInteractions(metricRepository);
+    }
+
+    @Test
+    void shouldIncludeRecordReturnedByServiceRegardlessOfDepartmentCase() throws IOException {
+        OpenSlo record = new OpenSlo();
+        record.setId(1L);
+        record.setKind("SLO");
+        record.setDisplayName("Lowercase Dept SLO");
+        record.setName("lc");
+        record.setSpec("spec: {objectives: [{target: 0.95}], timeWindow: [{duration: 30d}]}");
+        record.setDepartment("finance");
+
+        when(openSloService.getRecordById(1L)).thenReturn(Optional.of(record));
+        when(openSloService.parseTargetFromSpec(anyString())).thenReturn(0.95);
+
+        ReportOptionsDTO options = new ReportOptionsDTO();
+        options.setIds(List.of(1L));
+
+        assertTrue(pdfText(reportService.generatePdfReport(options)).contains("Lowercase Dept SLO"));
     }
 
     @Test
@@ -122,7 +160,6 @@ class ReportServiceTest {
         slo.setDepartment("Engineering");
 
         when(openSloService.getRecordById(10L)).thenReturn(Optional.of(slo));
-        when(openSloService.getCurrentUserDepartments()).thenReturn(Collections.singletonList("Engineering"));
         when(openSloService.parseTargetFromSpec(anyString())).thenReturn(0.95);
         when(metricRepository.findBySliAndTimestampAfterOrderByTimestampDesc(any(), any())).thenReturn(new ArrayList<>());
 
@@ -148,7 +185,6 @@ class ReportServiceTest {
         slo.setSpec("target: 0.9");
 
         when(openSloService.getRecordById(20L)).thenReturn(Optional.of(slo));
-        when(openSloService.getCurrentUserDepartments()).thenReturn(Collections.emptyList());
         when(metricRepository.findBySliAndTimestampAfterOrderByTimestampDesc(any(), any())).thenReturn(new ArrayList<>());
 
         ReportOptionsDTO options = new ReportOptionsDTO();
@@ -184,7 +220,6 @@ class ReportServiceTest {
         slo.setSpec("target: 0.99");
 
         when(openSloService.getRecordById(30L)).thenReturn(Optional.of(slo));
-        when(openSloService.getCurrentUserDepartments()).thenReturn(Collections.emptyList());
         when(metricRepository.findBySliAndTimestampAfterOrderByTimestampDesc(any(), any())).thenReturn(new ArrayList<>());
 
         ReportOptionsDTO options = new ReportOptionsDTO();

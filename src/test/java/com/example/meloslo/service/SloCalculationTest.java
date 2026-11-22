@@ -36,7 +36,8 @@ class SloCalculationTest {
     @BeforeEach
     void setUp() {
         MockitoAnnotations.openMocks(this);
-        service = new OpenSloService(repository, metricRepository, userRepository);
+        service = new OpenSloService(repository, metricRepository,
+                new DepartmentAccessService(userRepository), new OpenSloRedactor());
     }
 
     @Test

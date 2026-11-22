@@ -6,16 +6,14 @@ import com.example.meloslo.dto.SliReport;
 import com.example.meloslo.dto.SloReport;
 import com.example.meloslo.model.SliMetric;
 import com.example.meloslo.model.OpenSlo;
-import com.example.meloslo.model.User;
 import com.example.meloslo.repository.MetricRepository;
 import com.example.meloslo.repository.OpenSloRepository;
-import com.example.meloslo.repository.UserRepository;
+import com.example.meloslo.service.DepartmentAccessService.AccessScope;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.security.core.Authentication;
-import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -35,58 +33,23 @@ public class OpenSloService {
 
     private final OpenSloRepository repository;
     private final MetricRepository metricRepository;
-    private final UserRepository userRepository;
+    private final DepartmentAccessService accessService;
+    private final OpenSloRedactor redactor;
     private final ObjectMapper yamlMapper = new ObjectMapper(new YAMLFactory());
 
     @Autowired
-    public OpenSloService(OpenSloRepository repository, MetricRepository metricRepository, UserRepository userRepository) {
+    public OpenSloService(OpenSloRepository repository, MetricRepository metricRepository,
+                          DepartmentAccessService accessService, OpenSloRedactor redactor) {
         this.repository = repository;
         this.metricRepository = metricRepository;
-        this.userRepository = userRepository;
+        this.accessService = accessService;
+        this.redactor = redactor;
     }
 
-    public List<String> getCurrentUserDepartments() {
-        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
-        if (auth == null || !auth.isAuthenticated() || "anonymousUser".equals(auth.getPrincipal())) {
-            return java.util.Collections.emptyList();
-        }
-        String deptsStr = userRepository.findByUsername(auth.getName())
-                .map(User::getDepartments)
-                .orElse(null);
-        if (deptsStr == null || deptsStr.trim().isEmpty()) {
-            return java.util.Collections.emptyList();
-        }
-        return java.util.Arrays.stream(deptsStr.split(","))
-                .map(String::trim)
-                .filter(s -> !s.isEmpty())
-                .collect(java.util.stream.Collectors.toList());
-    }
-
-    private List<OpenSlo> filterByDepartment(List<OpenSlo> records) {
-        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
-        
-        // Background tasks or internal calls might not have an authentication context
-        if (auth == null || !auth.isAuthenticated()) {
+    private List<OpenSlo> filterAccessible(List<OpenSlo> records, AccessScope scope) {
+        if (scope.isUnrestricted()) {
             return records;
         }
-
-        // ROLE_ADMIN check
-        boolean isAdmin = auth.getAuthorities().stream().anyMatch(a -> a.getAuthority().equals("ROLE_ADMIN"));
-        // Check if username is admin (for tests stability)
-        if (isAdmin || auth.getName().equalsIgnoreCase("admin")) {
-            return records;
-        }
-        
-        // anonymousUser check
-        if ("anonymousUser".equals(auth.getPrincipal())) {
-            return records; 
-        }
-        
-        List<String> userDepts = getCurrentUserDepartments();
-        if (userDepts.isEmpty()) {
-            return records;
-        }
-
         // Initialize collections within the transaction to avoid LazyInitializationException
         for (OpenSlo record : records) {
             if (record.getSlis() != null) record.getSlis().size();
@@ -94,45 +57,63 @@ public class OpenSloService {
             if (record.getIndicatorSlis() != null) record.getIndicatorSlis().size();
             if (record.getLinkedSlos() != null) record.getLinkedSlos().size();
         }
+        return records.stream().filter(scope::canAccess).collect(Collectors.toList());
+    }
 
-        return records.stream()
-                .filter(r -> r.getDepartment() == null || r.getDepartment().isEmpty() || userDepts.stream().anyMatch(dept -> dept.equalsIgnoreCase(r.getDepartment())))
-                .collect(java.util.stream.Collectors.toList());
+    private OpenSlo findAccessibleOrThrow(Long id, AccessScope scope) {
+        return repository.findById(id)
+                .filter(scope::canAccess)
+                .orElseThrow(() -> new RuntimeException("OpenSLO record not found with id " + id));
+    }
+
+    private List<OpenSlo> visible(List<OpenSlo> records, AccessScope scope) {
+        if (records == null) {
+            return new ArrayList<>();
+        }
+        if (scope.isUnrestricted()) {
+            return records;
+        }
+        return records.stream().filter(scope::canAccess).collect(Collectors.toList());
+    }
+
+    /** Child SLOs of the given service that the current caller may see. */
+    public List<OpenSlo> getAccessibleSlos(OpenSlo service) {
+        return visible(service.getSlos(), accessService.currentScope());
     }
 
     @Transactional(readOnly = true)
     public List<OpenSlo> getAllRecords() {
-        List<OpenSlo> records = filterByDepartment(repository.findAll());
-        populateTransientFieldsForList(records);
-        return records;
+        AccessScope scope = accessService.currentScope();
+        List<OpenSlo> records = filterAccessible(repository.findAll(), scope);
+        populateTransientFieldsForList(records, scope);
+        return redactor.redactAll(records, scope);
     }
 
     @Transactional(readOnly = true)
     public List<OpenSlo> getRecordsByKind(String kind) {
-        List<OpenSlo> records = filterByDepartment(repository.findByKind(kind));
-        populateTransientFieldsForList(records);
-        return records;
+        AccessScope scope = accessService.currentScope();
+        List<OpenSlo> records = filterAccessible(repository.findByKind(kind), scope);
+        populateTransientFieldsForList(records, scope);
+        return redactor.redactAll(records, scope);
     }
 
     @Transactional(readOnly = true)
     public Optional<OpenSlo> getRecordById(Long id) {
-        Optional<OpenSlo> record = repository.findById(id);
-        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
-        if (auth != null && auth.getAuthorities().stream().anyMatch(a -> a.getAuthority().equals("ROLE_ADMIN"))) {
-            record.ifPresent(this::populateTransientFields);
-            return record;
-        }
-        
-        List<String> userDepts = getCurrentUserDepartments();
-        if (!userDepts.isEmpty() && record.isPresent() && userDepts.stream().noneMatch(dept -> dept.equalsIgnoreCase(record.get().getDepartment()))) {
-            return Optional.empty();
-        }
-        record.ifPresent(this::populateTransientFields);
-        return record;
+        AccessScope scope = accessService.currentScope();
+        return repository.findById(id)
+                .filter(scope::canAccess)
+                .map(r -> {
+                    populateTransientFields(r, scope);
+                    return redactor.redact(r, scope);
+                });
     }
 
     @Transactional(readOnly = true)
     public void populateTransientFieldsForList(List<OpenSlo> records) {
+        populateTransientFieldsForList(records, accessService.currentScope());
+    }
+
+    private void populateTransientFieldsForList(List<OpenSlo> records, AccessScope scope) {
         List<OpenSlo> slos = records.stream()
                 .filter(r -> "SLO".equalsIgnoreCase(r.getKind()))
                 .collect(Collectors.toList());
@@ -140,7 +121,7 @@ public class OpenSloService {
         if (!slos.isEmpty()) {
             // Find all unique SLIs across all SLOs
             List<OpenSlo> allSlis = slos.stream()
-                    .flatMap(slo -> slo.getSlis().stream())
+                    .flatMap(slo -> visible(slo.getSlis(), scope).stream())
                     .distinct()
                     .collect(Collectors.toList());
 
@@ -163,7 +144,7 @@ public class OpenSloService {
                     int windowDays = parseWindowDaysFromSpec(slo.getSpec());
                     LocalDateTime sloWindowStart = LocalDateTime.now().minusDays(windowDays);
 
-                    List<SliMetric> sloMetrics = slo.getSlis().stream()
+                    List<SliMetric> sloMetrics = visible(slo.getSlis(), scope).stream()
                             .flatMap(sli -> metricsBySliId.getOrDefault(sli.getId(), new ArrayList<>()).stream())
                             .filter(m -> m.getTimestamp().isAfter(sloWindowStart))
                             .collect(Collectors.toList());
@@ -184,24 +165,28 @@ public class OpenSloService {
         // Handle BusinessService if needed - though they might depend on populated SLOs
         for (OpenSlo record : records) {
             if ("BusinessService".equalsIgnoreCase(record.getKind())) {
-                populateTransientFields(record);
+                populateTransientFields(record, scope);
             }
         }
     }
 
     public void populateTransientFields(OpenSlo record) {
+        populateTransientFields(record, accessService.currentScope());
+    }
+
+    private void populateTransientFields(OpenSlo record, AccessScope scope) {
         if ("SLO".equalsIgnoreCase(record.getKind())) {
-            SloReport report = calculateSloReport(record);
+            SloReport report = calculateSloReport(record, scope);
             record.setErrorBudget(report.getErrorBudget());
             record.setStatus(determineStatus(report.getErrorBudget()));
             record.setCurrentValue(report.getCurrentValue());
         } else if ("BusinessService".equalsIgnoreCase(record.getKind())) {
-            List<OpenSlo> childSlos = record.getSlos();
-            if (childSlos != null && !childSlos.isEmpty()) {
+            List<OpenSlo> childSlos = visible(record.getSlos(), scope);
+            if (!childSlos.isEmpty()) {
                 double totalValue = 0;
                 double minErrorBudget = Double.MAX_VALUE;
                 for (OpenSlo slo : childSlos) {
-                    SloReport report = calculateSloReport(slo);
+                    SloReport report = calculateSloReport(slo, scope);
                     totalValue += report.getCurrentValue();
                     if (report.getErrorBudget() < minErrorBudget) {
                         minErrorBudget = report.getErrorBudget();
@@ -218,63 +203,78 @@ public class OpenSloService {
         }
     }
 
+    @Transactional(readOnly = true)
     public Optional<OpenSlo> getRecordByName(String name) {
-        Optional<OpenSlo> record = repository.findByName(name);
-        List<String> userDepts = getCurrentUserDepartments();
-        if (!userDepts.isEmpty() && record.isPresent() && userDepts.stream().noneMatch(dept -> dept.equalsIgnoreCase(record.get().getDepartment()))) {
-            return Optional.empty();
-        }
-        return record;
+        AccessScope scope = accessService.currentScope();
+        return repository.findByName(name)
+                .filter(scope::canAccess)
+                .map(r -> redactor.redact(r, scope));
     }
 
     @Transactional
     public OpenSlo createRecord(OpenSlo record) {
-        return repository.save(record);
+        if (record.getId() != null) {
+            throw new IllegalArgumentException("A new record must not have an id");
+        }
+        AccessScope scope = accessService.currentScope();
+        if (!scope.canAssign(record.getDepartment())) {
+            throw new AccessDeniedException("You can only create records in your own departments");
+        }
+        return redactor.redact(repository.save(record), scope);
     }
 
     @Transactional
     public OpenSlo updateRecord(Long id, OpenSlo updatedRecord) {
-        return repository.findById(id)
-                .map(record -> {
-                    record.setApiVersion(updatedRecord.getApiVersion());
-                    record.setKind(updatedRecord.getKind());
-                    record.setName(updatedRecord.getName());
-                    record.setDisplayName(updatedRecord.getDisplayName());
-                    record.setSpec(updatedRecord.getSpec());
-                    record.setDepartment(updatedRecord.getDepartment());
-                    record.setManager(updatedRecord.getManager());
-                    record.setRefreshRate(updatedRecord.getRefreshRate());
-                    record.setLastRefreshTime(updatedRecord.getLastRefreshTime());
-                    record.setAlertUrl(updatedRecord.getAlertUrl());
-                    record.setAlertPayload(updatedRecord.getAlertPayload());
-                    record.setAlertingSource(updatedRecord.getAlertingSource());
-                    record.setService(updatedRecord.getService());
-                    record.setDatasource(updatedRecord.getDatasource());
-                    record.setSlis(updatedRecord.getSlis());
-                    record.setSlos(updatedRecord.getSlos());
-                    return repository.save(record);
-                }).orElseThrow(() -> new RuntimeException("OpenSlo record not found with id " + id));
+        AccessScope scope = accessService.currentScope();
+        OpenSlo record = findAccessibleOrThrow(id, scope);
+        if (!scope.canAssign(updatedRecord.getDepartment())) {
+            throw new AccessDeniedException("You can only assign records to your own departments");
+        }
+        record.setApiVersion(updatedRecord.getApiVersion());
+        record.setKind(updatedRecord.getKind());
+        record.setName(updatedRecord.getName());
+        record.setDisplayName(updatedRecord.getDisplayName());
+        record.setSpec(updatedRecord.getSpec());
+        record.setDepartment(updatedRecord.getDepartment());
+        record.setManager(updatedRecord.getManager());
+        record.setRefreshRate(updatedRecord.getRefreshRate());
+        record.setLastRefreshTime(updatedRecord.getLastRefreshTime());
+        record.setAlertUrl(updatedRecord.getAlertUrl());
+        record.setAlertPayload(updatedRecord.getAlertPayload());
+        record.setAlertingSource(updatedRecord.getAlertingSource());
+        record.setService(updatedRecord.getService());
+        record.setDatasource(updatedRecord.getDatasource());
+        record.setSlis(updatedRecord.getSlis());
+        record.setSlos(updatedRecord.getSlos());
+        return redactor.redact(repository.save(record), scope);
     }
 
     @Transactional
     public void deleteRecord(Long id) {
-        repository.findById(id).ifPresent(record -> {
-            metricRepository.deleteBySli(record);
-            metricRepository.deleteByDatasource(record);
-            
-            // Cleanup linked SLOs if this is an AlertingSource
-            if ("AlertingSource".equalsIgnoreCase(record.getKind())) {
-                List<OpenSlo> slos = repository.findByKind("SLO");
-                for (OpenSlo slo : slos) {
-                    if (slo.getAlertingSource() != null && slo.getAlertingSource().getId().equals(record.getId())) {
-                        slo.setAlertingSource(null);
-                        repository.save(slo);
-                    }
+        AccessScope scope = accessService.currentScope();
+        OpenSlo record = findAccessibleOrThrow(id, scope);
+
+        // Deleting an AlertingSource unlinks the SLOs that use it. Check every dependent before
+        // changing anything, so a restricted caller cannot modify another department's SLO.
+        List<OpenSlo> dependents = new ArrayList<>();
+        if ("AlertingSource".equalsIgnoreCase(record.getKind())) {
+            for (OpenSlo slo : repository.findByKind("SLO")) {
+                if (slo.getAlertingSource() != null && slo.getAlertingSource().getId().equals(record.getId())) {
+                    dependents.add(slo);
                 }
             }
-            
-            repository.delete(record);
-        });
+            if (dependents.stream().anyMatch(d -> !scope.canAccess(d))) {
+                throw new AccessDeniedException("This alerting source is used by SLOs in other departments");
+            }
+        }
+
+        metricRepository.deleteBySli(record);
+        metricRepository.deleteByDatasource(record);
+        for (OpenSlo slo : dependents) {
+            slo.setAlertingSource(null);
+            repository.save(slo);
+        }
+        repository.delete(record);
     }
 
     public SliMetric createMetric(SliMetric metric) {
@@ -291,8 +291,8 @@ public class OpenSloService {
 
     @Transactional(readOnly = true)
     public SliReport getSliReport(Long id) {
-        OpenSlo sli = repository.findById(id)
-                .orElseThrow(() -> new RuntimeException("OpenSLO record not found with id " + id));
+        AccessScope scope = accessService.currentScope();
+        OpenSlo sli = findAccessibleOrThrow(id, scope);
 
         if (!"SLI".equalsIgnoreCase(sli.getKind())) {
             throw new RuntimeException("Record is not of kind SLI");
@@ -309,7 +309,7 @@ public class OpenSloService {
         List<OpenSlo> allSlos = repository.findByKind("SLO");
         double totalTarget = 0;
         int targetCount = 0;
-        for (OpenSlo slo : allSlos) {
+        for (OpenSlo slo : visible(allSlos, scope)) {
             if (slo.getSlis() != null && slo.getSlis().contains(sli)) {
                 totalTarget += parseTargetFromSpec(slo.getSpec());
                 targetCount++;
@@ -320,35 +320,34 @@ public class OpenSloService {
         // Take up to last 100 metrics for display in SLI view
         List<SliMetric> recentMetrics = allMetrics.size() > 100 ? allMetrics.subList(0, 100) : allMetrics;
 
-        return new SliReport(sli.getName(), sli.getDisplayName(), currentValue, avgTarget, recentMetrics);
+        return new SliReport(sli.getName(), sli.getDisplayName(), currentValue, avgTarget,
+                redactor.redactMetrics(recentMetrics, scope));
     }
 
     @Transactional(readOnly = true)
     public SloReport getSloReport(Long id) {
-        OpenSlo slo = repository.findById(id)
-                .orElseThrow(() -> new RuntimeException("OpenSLO record not found with id " + id));
+        AccessScope scope = accessService.currentScope();
+        OpenSlo slo = findAccessibleOrThrow(id, scope);
 
         if (!"SLO".equalsIgnoreCase(slo.getKind())) {
             throw new RuntimeException("Record is not of kind SLO");
         }
 
-        return calculateSloReport(slo);
+        return calculateSloReport(slo, scope);
     }
 
     @Transactional(readOnly = true)
     public DashboardStats getDashboardStats() {
-        List<OpenSlo> services = repository.findByKind("BusinessService");
-        List<OpenSlo> slos = repository.findByKind("SLO");
-        
-        List<OpenSlo> filteredServices = filterByDepartment(services);
-        List<OpenSlo> filteredSlos = filterByDepartment(slos);
+        AccessScope scope = accessService.currentScope();
+        List<OpenSlo> filteredServices = filterAccessible(repository.findByKind("BusinessService"), scope);
+        List<OpenSlo> filteredSlos = filterAccessible(repository.findByKind("SLO"), scope);
         
         long healthy = 0;
         long warning = 0;
         long breaching = 0;
         
         for (OpenSlo slo : filteredSlos) {
-            SloReport report = calculateSloReport(slo);
+            SloReport report = calculateSloReport(slo, scope);
             String status = determineStatus(report.getErrorBudget());
             if ("Healthy".equalsIgnoreCase(status)) {
                 healthy++;
@@ -374,12 +373,16 @@ public class OpenSloService {
 
     @Transactional(readOnly = true)
     public SloReport calculateSloReport(OpenSlo slo) {
+        return calculateSloReport(slo, accessService.currentScope());
+    }
+
+    private SloReport calculateSloReport(OpenSlo slo, AccessScope scope) {
         double target = parseTargetFromSpec(slo.getSpec());
         int windowDays = parseWindowDaysFromSpec(slo.getSpec());
         LocalDateTime windowStart = LocalDateTime.now().minusDays(windowDays);
 
         List<SliMetric> allMetrics = new ArrayList<>();
-        for (OpenSlo sli : slo.getSlis()) {
+        for (OpenSlo sli : visible(slo.getSlis(), scope)) {
             allMetrics.addAll(metricRepository.findBySliAndTimestampAfterOrderByTimestampDesc(sli, windowStart));
         }
 
@@ -399,7 +402,8 @@ public class OpenSloService {
         // Calculate 30-day historical SLO values
         List<Double> historicalSloValues = calculateHistoricalSloValues(allMetrics, 30);
 
-        return new SloReport(slo.getName(), target, currentSloValue, errorBudget, status, recentMetrics, trendPoints, historicalSloValues);
+        return new SloReport(slo.getName(), target, currentSloValue, errorBudget, status,
+                redactor.redactMetrics(recentMetrics, scope), trendPoints, historicalSloValues);
     }
 
     private List<Double> calculateHistoricalSloValues(List<SliMetric> metrics, int days) {
@@ -498,18 +502,16 @@ public class OpenSloService {
 
     @Transactional(readOnly = true)
     public BusinessServiceReport getServiceReport(Long id) {
-        OpenSlo service = repository.findById(id)
-                .orElseThrow(() -> new RuntimeException("OpenSLO record not found with id " + id));
+        AccessScope scope = accessService.currentScope();
+        OpenSlo service = findAccessibleOrThrow(id, scope);
 
         if (!"BusinessService".equalsIgnoreCase(service.getKind())) {
             throw new RuntimeException("Record is not of kind BusinessService");
         }
 
         List<SloReport> sloReports = new ArrayList<>();
-        if (service.getSlos() != null) {
-            for (OpenSlo slo : service.getSlos()) {
-                sloReports.add(calculateSloReport(slo));
-            }
+        for (OpenSlo slo : visible(service.getSlos(), scope)) {
+            sloReports.add(calculateSloReport(slo, scope));
         }
 
         return new BusinessServiceReport(service.getName(), service.getDisplayName(), sloReports);
