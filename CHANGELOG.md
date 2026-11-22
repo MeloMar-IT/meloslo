@@ -1,6 +1,9 @@
 # Changelog
 
 ## [Unreleased]
+### Added
+- Dependabot configuration (`.github/dependabot.yml`) that checks Maven and GitHub Actions dependencies weekly and groups minor and patch updates (#43).
+
 ### Security
 - The H2 console (`/h2-console`) is off by default and enabled only under the `dev` profile, where it requires the ADMIN role (#35).
 - Live mode no longer creates `admin/admin` or `testuser/testuser`. It creates only `admin`, with a password from `APP_ADMIN_INITIAL_PASSWORD` or a random one logged once (#35).
@@ -20,6 +23,7 @@
 - The PDF report uses the same average, error budget and status rules as the dashboard. Gaps in the PDF are left empty instead of being filled with 0%.
 - `DashboardStats` includes a `noDataSlos` count.
 - The simulated failure rate is configurable with `app.datasource.simulated-failure-rate` (default `0.03`).
+- Spring Boot is upgraded from the end-of-life 3.2.0 to 3.5.7, which brings Spring Framework 6.2 and Spring Security 6.5. The 3.2.0 line had published CVEs, including in `UriComponentsBuilder` (CVE-2024-22243, CVE-2024-22259, CVE-2024-22262) (#43).
 
 ### Fixed
 - Restarting in test mode no longer wipes all records and users when a demo record was renamed or deleted, the `testuser` account was removed, or an SLI has fewer than 30 metrics, including SLIs created by users (#40).

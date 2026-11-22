@@ -32,6 +32,9 @@ Repository tests use `@DataJpaTest` to verify database interactions, custom quer
 - `UserRepositoryTest`: Tests user account persistence and department-based filtering queries.
 - `EncryptionTest`: Ensures that sensitive data (like credentials in spec) is correctly encrypted/decrypted.
 
+### 1.4 Dependencies
+- `DependencyBaselineTest`: Guards against a downgrade of the Spring stack. It checks that Spring Boot is at least 3.5, Spring Framework at least 6.2 and Spring Security at least 6.5 (minimum versions only), and that the version comparison helper behaves correctly.
+
 ## 2. Functional & Integration Tests
 
 Functional tests verify the application as a whole or large parts of it, often involving a real database (H2 in-memory) and the full Spring context.
