@@ -44,6 +44,36 @@ public class MetricFunctionalTest extends BaseFunctionalTest {
     }
 
     @Test
+    void shouldRefuseOutOfRangeMetricValues() {
+        OpenSlo sli = openSloRepository.save(new OpenSlo("openslo/v1", "SLI", "range-sli", "Range SLI", "{}"));
+
+        for (Double bad : new Double[]{150.0, -1.0, 100.1, -0.1}) {
+            ResponseEntity<String> response = adminAuth().postForEntity("/api/v1/metrics",
+                    new SliMetric(LocalDateTime.now(), bad, sli, null), String.class);
+            assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+            assertThat(response.getBody()).contains("message").contains("between 0 and 100");
+        }
+        // A missing value is refused as well
+        ResponseEntity<String> missing = adminAuth().postForEntity("/api/v1/metrics",
+                new SliMetric(LocalDateTime.now(), null, sli, null), String.class);
+        assertThat(missing.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+
+        assertThat(metricRepository.count()).isZero();
+    }
+
+    @Test
+    void shouldAcceptBoundaryMetricValues() {
+        OpenSlo sli = openSloRepository.save(new OpenSlo("openslo/v1", "SLI", "edge-sli", "Edge SLI", "{}"));
+
+        for (Double ok : new Double[]{0.0, 100.0}) {
+            ResponseEntity<SliMetric> response = adminAuth().postForEntity("/api/v1/metrics",
+                    new SliMetric(LocalDateTime.now(), ok, sli, null), SliMetric.class);
+            assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+        }
+        assertThat(metricRepository.count()).isEqualTo(2);
+    }
+
+    @Test
     void shouldReturnForbiddenForRegularUser() {
         ResponseEntity<Object> response = userAuth().getForEntity("/api/v1/metrics", Object.class);
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);

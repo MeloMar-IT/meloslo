@@ -31,10 +31,17 @@ class SloMathTest {
     }
 
     @Test
-    void errorBudgetHandlesNullAndFullTarget() {
-        assertNull(SloMath.errorBudget(null, 0.95));
-        assertEquals(-20.0, SloMath.errorBudget(0.94, 0.95), 1e-9);
-        assertEquals(100.0, SloMath.errorBudget(0.5, 1.0), 1e-9);
+    void errorBudgetHandlesNullValueAndInvalidTarget() {
+        assertNull(SloMath.errorBudget(null, 95.0));
+        assertNull(SloMath.errorBudget(94.0, null));
+        assertEquals(-20.0, SloMath.errorBudget(94.0, 95.0), 1e-9);
+    }
+
+    @Test
+    void invalidTargetGivesUnknownStatus() {
+        assertEquals(SloMath.UNKNOWN, SloMath.status(null, null));
+        assertEquals(SloMath.NO_DATA, SloMath.status(null, 95.0));
+        assertEquals(SloMath.HEALTHY, SloMath.status(30.0, 95.0));
     }
 
     @Test

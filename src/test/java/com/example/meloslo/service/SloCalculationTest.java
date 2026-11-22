@@ -58,8 +58,8 @@ class SloCalculationTest {
         when(repository.findById(2L)).thenReturn(Optional.of(slo));
 
         List<SliMetric> metrics = new ArrayList<>();
-        metrics.add(new SliMetric(LocalDateTime.now().minusDays(1), 0.90, sli, null));
-        metrics.add(new SliMetric(LocalDateTime.now().minusDays(2), 1.00, sli, null));
+        metrics.add(new SliMetric(LocalDateTime.now().minusDays(1), 90.0, sli, null));
+        metrics.add(new SliMetric(LocalDateTime.now().minusDays(2), 100.0, sli, null));
 
         when(metricRepository.findBySliAndTimestampAfterOrderByTimestampDesc(eq(sli), any(LocalDateTime.class)))
                 .thenReturn(metrics);
@@ -70,9 +70,14 @@ class SloCalculationTest {
         // Then
         assertNotNull(report);
         assertEquals("test-slo", report.getName());
-        assertEquals(0.95, report.getTarget());
-        assertEquals(0.95, report.getCurrentValue()); // (0.9 + 1.0) / 2 = 0.95
-        assertEquals(0.0, report.getErrorBudget(), 0.001); // (0.95 - 0.95) / (1 - 0.95) = 0
+        assertEquals(95.0, report.getTarget(), 1e-9);
+        assertEquals(95.0, report.getCurrentValue(), 1e-9); // (90 + 100) / 2 = 95
+        assertEquals(0.0, report.getErrorBudget(), 0.001); // (95 - 95) / (100 - 95) = 0
+        // Historical values stay on 0 to 100; days without samples are null (no data), not 100
+        assertTrue(report.getHistoricalSloValues().stream().filter(java.util.Objects::nonNull).allMatch(v -> v <= 100.0));
+        assertNull(report.getHistoricalSloValues().get(0));
+        assertEquals(90.0, report.getHistoricalSloValues().get(28), 1e-9);
+        assertEquals(100.0, report.getHistoricalSloValues().get(27), 1e-9);
     }
 
     @Test
@@ -90,6 +95,6 @@ class SloCalculationTest {
         SloReport report = service.getSloReport(3L);
 
         // Then
-        assertEquals(0.99, report.getTarget()); // Default target
+        assertEquals(99.0, report.getTarget(), 1e-9); // Default target
     }
 }

@@ -1,6 +1,8 @@
 package com.example.meloslo.model;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
@@ -15,6 +17,9 @@ import java.time.LocalDateTime;
 @JsonIgnoreProperties({"hibernateLazyInitializer", "handler"})
 public class SliMetric {
 
+    /** Value of {@code valueScale} for values on the 0 to 100 scale. */
+    public static final String SCALE_PERCENT = "PERCENT";
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
@@ -22,6 +27,10 @@ public class SliMetric {
     private LocalDateTime timestamp;
 
     private Double metricValue;
+
+    /** Marks the scale of the stored value; NULL means a legacy row (fraction scale) awaiting migration. */
+    @Column(name = "value_scale")
+    private String valueScale = SCALE_PERCENT;
 
     @ManyToOne(fetch = FetchType.EAGER)
     @JoinColumn(name = "sli_id")
@@ -65,6 +74,11 @@ public class SliMetric {
 
     public void setValue(Double value) {
         this.metricValue = value;
+    }
+
+    @JsonIgnore
+    public String getValueScale() {
+        return valueScale;
     }
 
     public OpenSlo getSli() {

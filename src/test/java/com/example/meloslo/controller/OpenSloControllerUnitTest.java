@@ -2,6 +2,7 @@ package com.example.meloslo.controller;
 
 import com.example.meloslo.dto.DashboardStats;
 import com.example.meloslo.model.OpenSlo;
+import com.example.meloslo.service.InvalidSliValueException;
 import com.example.meloslo.service.OpenSloService;
 import com.example.meloslo.repository.UserRepository;
 import com.example.meloslo.config.SecurityConfig;
@@ -120,6 +121,28 @@ public class OpenSloControllerUnitTest {
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(slo)))
                 .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void shouldReturnBadRequestWhenCreatingRecordWithInvalidTarget() throws Exception {
+        when(service.createRecord(any(OpenSlo.class))).thenThrow(new InvalidSliValueException("bad target"));
+
+        mockMvc.perform(post("/api/v1/openslo")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(slo)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("bad target"));
+    }
+
+    @Test
+    void shouldReturnBadRequestNotNotFoundWhenUpdatingRecordWithInvalidTarget() throws Exception {
+        when(service.updateRecord(eq(1L), any(OpenSlo.class))).thenThrow(new InvalidSliValueException("bad target"));
+
+        mockMvc.perform(put("/api/v1/openslo/1")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(slo)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("bad target"));
     }
 
     @Test

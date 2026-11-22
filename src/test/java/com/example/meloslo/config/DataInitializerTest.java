@@ -8,6 +8,7 @@ import com.example.meloslo.repository.UserRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 import org.springframework.boot.CommandLineRunner;
@@ -17,6 +18,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
@@ -49,9 +51,56 @@ class DataInitializerTest {
     }
 
     private void verifyNoDemoDataTouched() {
-        verifyNoInteractions(openSloRepository, metricRepository);
+        verifyNoInteractions(openSloRepository);
+        // Only the metric scale migration may touch the metric repository
+        verify(metricRepository).convertLegacyFractionValues();
+        verify(metricRepository).markLegacyValuesAsPercent();
+        verifyNoMoreInteractions(metricRepository);
         verify(userRepository, never()).deleteAll();
         verify(userRepository, never()).save(argThat(user -> "testuser".equals(user.getUsername())));
+    }
+
+    @Test
+    void shouldMigrateLegacyMetricScaleBeforeSeedingInLiveMode() throws Exception {
+        when(userRepository.findByUsername("admin")).thenReturn(Optional.empty());
+        when(metricRepository.convertLegacyFractionValues()).thenReturn(3);
+        when(metricRepository.markLegacyValuesAsPercent()).thenReturn(1);
+
+        liveRunner().run();
+
+        InOrder order = inOrder(metricRepository, userRepository);
+        order.verify(metricRepository).convertLegacyFractionValues();
+        order.verify(metricRepository).markLegacyValuesAsPercent();
+        order.verify(userRepository, atLeastOnce()).findByUsername("admin");
+    }
+
+    @Test
+    void shouldFailStartupAndSeedNothingWhenMigrationFails() {
+        ReflectionTestUtils.setField(dataInitializer, "datasourceMode", "test");
+        when(metricRepository.convertLegacyFractionValues()).thenThrow(new IllegalStateException("db down"));
+
+        CommandLineRunner runner = dataInitializer.initDatabase(openSloRepository, metricRepository, userRepository, passwordEncoder);
+
+        assertThrows(IllegalStateException.class, runner::run);
+        verify(metricRepository, never()).markLegacyValuesAsPercent();
+        verify(userRepository, never()).save(any());
+        verify(openSloRepository, never()).save(any());
+    }
+
+    @Test
+    void shouldMigrateNormallyOnRetryAfterFailure() throws Exception {
+        when(userRepository.findByUsername("admin")).thenReturn(Optional.empty());
+        when(metricRepository.convertLegacyFractionValues())
+                .thenThrow(new IllegalStateException("db down"))
+                .thenReturn(2);
+
+        CommandLineRunner runner = liveRunner();
+        assertThrows(IllegalStateException.class, runner::run);
+
+        runner.run();
+
+        verify(metricRepository, times(2)).convertLegacyFractionValues();
+        verify(metricRepository, times(1)).markLegacyValuesAsPercent();
     }
 
     @Test

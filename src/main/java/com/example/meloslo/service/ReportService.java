@@ -202,10 +202,15 @@ public class ReportService {
                     Map<LocalDateTime, Double> aggregatedData = SloMath.bucketAverages(allServiceMetrics, since, now, ldt -> truncateTo(ldt, aggUnit), aggUnit);
                     
                     double totalTarget = 0;
+                    int targetCount = 0;
                     for (OpenSlo slo : slos) {
-                        totalTarget += openSloService.parseTargetFromSpec(slo.getSpec());
+                        Double t = openSloService.parseTargetFromSpec(slo.getSpec());
+                        if (t != null) {
+                            totalTarget += t;
+                            targetCount++;
+                        }
                     }
-                    double serviceTarget = totalTarget / slos.size();
+                    Double serviceTarget = targetCount > 0 ? totalTarget / targetCount : null;
                     
                     addChart(document, normalFont, generateChartImage(record.getDisplayName() + " Aggregated Performance", aggregatedData, serviceTarget, null, "Performance (%)"));
                     document.add(new Chunk("\n"));
@@ -225,8 +230,9 @@ public class ReportService {
         
         document.add(new Paragraph("SLO Performance: " + slo.getDisplayName(), boldFont));
         
-        double target = openSloService.parseTargetFromSpec(slo.getSpec());
-        
+        // Null when the stored target is invalid: the SLO is then reported as Unknown
+        Double target = openSloService.parseTargetFromSpec(slo.getSpec());
+
         List<SliMetric> allMetrics = new ArrayList<>();
         if (slo.getSlis() != null) {
             for (OpenSlo sli : slo.getSlis()) {
@@ -243,12 +249,12 @@ public class ReportService {
         Double errorBudget = SloMath.errorBudget(avgValue, target);
 
         if (options.isIncludeSloDetails()) {
-            String status = SloMath.status(errorBudget);
+            String status = SloMath.status(errorBudget, target);
             String statusText = status.toUpperCase();
             Color statusColor = switch (status) {
                 case SloMath.HEALTHY -> new Color(0, 128, 0);
                 case SloMath.WARNING -> new Color(255, 165, 0);
-                case SloMath.NO_DATA -> new Color(128, 128, 128);
+                case SloMath.NO_DATA, SloMath.UNKNOWN -> new Color(128, 128, 128);
                 default -> Color.RED;
             };
 
@@ -264,18 +270,18 @@ public class ReportService {
 
             if (options.isIncludeTarget()) {
                 table.addCell("Target");
-                table.addCell(String.format("%.4f%%", target * 100));
+                table.addCell(target == null ? "N/A" : String.format("%.4f%%", target));
             }
 
             if (options.isIncludeAvgPerformance()) {
                 String timeLabel = options.getTimeValue() + " " + options.getTimeUnit().toLowerCase();
                 table.addCell("Average Performance (" + timeLabel + ")");
-                table.addCell(avgValue == null ? SloMath.NO_DATA : String.format("%.4f%%", avgValue * 100));
+                table.addCell(avgValue == null ? SloMath.NO_DATA : String.format("%.4f%%", avgValue));
             }
 
             if (options.isIncludeErrorBudget()) {
                 table.addCell("Error Budget Remaining");
-                table.addCell(errorBudget == null ? SloMath.NO_DATA : String.format("%.2f%%", errorBudget));
+                table.addCell(errorBudget == null ? (target == null ? "N/A" : SloMath.NO_DATA) : String.format("%.2f%%", errorBudget));
             }
 
             if (options.isIncludeStatus()) {
@@ -293,7 +299,7 @@ public class ReportService {
                 addChart(document, normalFont, generateChartImage(slo.getDisplayName() + " Performance", chartData, target, null, "Performance (%)"));
             }
 
-            if (options.isIncludeErrorBudgetChart()) {
+            if (options.isIncludeErrorBudgetChart() && target != null) {
                 // Empty buckets stay null so the chart shows a gap instead of a fake value
                 TreeMap<LocalDateTime, Double> ebData = new TreeMap<>();
                 chartData.forEach((dt, val) -> ebData.put(dt, SloMath.errorBudget(val, target)));
@@ -367,12 +373,10 @@ public class ReportService {
                 continue;
             }
             double val = entry.getValue();
-            if ("Performance (%)".equals(yAxisLabel)) val *= 100;
 
             series.addOrUpdate(new Second(date), val);
             if (target != null) {
                 double t = target;
-                if ("Performance (%)".equals(yAxisLabel)) t *= 100;
                 targetSeries.addOrUpdate(new Second(date), t);
                 baseSeries.addOrUpdate(new Second(date), Math.min(val, t));
             }
@@ -418,7 +422,6 @@ public class ReportService {
 
             if (target != null) {
                 double t = target;
-                if ("Performance (%)".equals(yAxisLabel)) t *= 100;
                 ValueMarker marker = new ValueMarker(t);
                 marker.setPaint(new Color(16, 185, 129));
                 marker.setStroke(new java.awt.BasicStroke(2.0f));

@@ -53,6 +53,7 @@ The system is built around four primary entities:
 | **🟡 Warning** | The error budget is being consumed at a rate that could lead to a breach. |
 | **🔴 Breaching** | The current performance has fallen below the target, or the error budget is exhausted. |
 | **⚪ No data** | The rolling window has no samples. The value and error budget are empty; they are never shown as 0% or 100%. |
+| **⚪ Unknown** | The stored SLO target is invalid. No error budget is calculated, and the SLO is not counted as breaching. |
 
 ---
 
@@ -85,7 +86,7 @@ The application features a sidebar providing access to:
 
 The system behavior is controlled by the `app.datasource.mode` configuration in `application.properties`:
 
-- **`test` (Default)**: Generates simulated metric data (0.9–1.0 range). Seeds sample data only into an empty database and never deletes existing data. Set `app.seed=true` to add missing demo records. Seeds the demo accounts `admin/admin` and `testuser/testuser`. Ideal for local development only.
+- **`test` (Default)**: Generates simulated metric data (values from 90 to 100). Seeds sample data only into an empty database and never deletes existing data. Set `app.seed=true` to add missing demo records. Seeds the demo accounts `admin/admin` and `testuser/testuser`. Ideal for local development only.
 - **`live`**: Intended for connection to real external endpoints. Creates only the `admin` user, and only if missing. Its password comes from `APP_ADMIN_INITIAL_PASSWORD`, or is a random value logged once at WARN level. No `testuser` is created.
 
 ### H2 Console
@@ -204,7 +205,7 @@ The `MetricFetchScheduler` component runs every **15 minutes** and performs the 
 2.  **Asynchronous Execution**: If an update is due, it spawns an asynchronous task via the `TaskManagementService`.
 3.  **Fetch Process**:
     -   It identifies all **SLIs** linked to that specific DataSource.
-    -   It "fetches" the current value for each SLI (currently using a simulation that generates values between 0.9 and 1.0, representing high reliability).
+    -   It "fetches" the current value for each SLI (currently using a simulation that generates values between 90 and 100, representing high reliability).
     -   In a production environment, this would involve executing queries against the external system's API (e.g., a PromQL query for Prometheus).
     -   The simulated fetch fails randomly with a probability set by `app.datasource.simulated-failure-rate` (default `0.03`). Set it to `0` to turn failures off.
 4.  **Persistence**: The fetched values are normalized (0-100) and stored in the `SLI_METRIC` table with a current timestamp.

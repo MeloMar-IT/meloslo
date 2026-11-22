@@ -46,6 +46,7 @@ public class DataInitializer {
     @Bean
     CommandLineRunner initDatabase(OpenSloRepository repository, MetricRepository metricRepository, UserRepository userRepository, PasswordEncoder passwordEncoder) {
         return args -> {
+            migrateLegacyMetricScale(metricRepository);
             log.info("Starting startup database verification...");
             if ("live".equalsIgnoreCase(datasourceMode)) {
                 if (seedRequested) {
@@ -74,6 +75,21 @@ public class DataInitializer {
 
     boolean isDatabaseEmpty(OpenSloRepository repository, UserRepository userRepository) {
         return repository.count() == 0 && userRepository.count() == 0;
+    }
+
+    /**
+     * One-time, idempotent migration of metric rows stored on the old fraction scale (0 to 1) to 0 to 100.
+     * Rows without a scale marker and a value of at most 1 are multiplied by 100 and marked; the remaining
+     * unmarked rows are assumed to be on 0 to 100 already and are only marked. Conversion marks the rows it
+     * changes in the same statement, so a retry after a partial failure never converts twice.
+     * Errors are deliberately not caught: a failed migration stops startup instead of leaving mixed scales.
+     */
+    private void migrateLegacyMetricScale(MetricRepository metricRepository) {
+        int converted = metricRepository.convertLegacyFractionValues();
+        int marked = metricRepository.markLegacyValuesAsPercent();
+        if (converted > 0 || marked > 0) {
+            log.info("Metric scale migration: converted {} fraction values to percent, marked {} other legacy values.", converted, marked);
+        }
     }
 
     /**
@@ -251,7 +267,7 @@ public class DataInitializer {
         LocalDateTime now = LocalDateTime.now();
         for (int i = 0; i < 30; i++) {
             LocalDateTime ts = now.minusDays(i);
-            double val = 0.95 + (Math.random() * 0.05);
+            double val = 95.0 + (Math.random() * 5.0);
             metricRepository.save(new SliMetric(ts, val, sli, datasource));
         }
     }

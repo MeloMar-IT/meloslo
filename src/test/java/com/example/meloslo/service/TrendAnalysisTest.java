@@ -32,7 +32,7 @@ public class TrendAnalysisTest {
     @InjectMocks
     private OpenSloService service;
 
-    private double target = 0.95;
+    private double target = 95.0;
 
     @SuppressWarnings("unchecked")
     private List<Double> invokeCalculateTrendPoints(List<SliMetric> metrics, double target, int futureDays) throws Exception {
@@ -46,14 +46,14 @@ public class TrendAnalysisTest {
         List<SliMetric> metrics = new ArrayList<>();
         LocalDateTime now = LocalDateTime.now().truncatedTo(java.time.temporal.ChronoUnit.DAYS);
         // Create 30 days of data with a clear downward trend in error budget
-        // Day 0: SLI = 0.99 (EB = (0.99-0.95)/(1-0.95)*100 = 80%)
-        // Day 29: SLI = 0.96 (EB = (0.96-0.95)/(1-0.95)*100 = 20%)
+        // Day 0: SLI = 99 (EB = (99-95)/(100-95)*100 = 80%)
+        // Day 29: SLI = 96 (EB = (96-95)/(100-95)*100 = 20%)
         for (int i = 0; i < 30; i++) {
-            double value = 0.99 - (0.03 * i / 29.0);
+            double value = 99.0 - (3.0 * i / 29.0);
             metrics.add(new SliMetric(now.minusDays(29 - i), value, null, null));
         }
 
-        List<Double> trend = invokeCalculateTrendPoints(metrics, 0.95, 30);
+        List<Double> trend = invokeCalculateTrendPoints(metrics, 95.0, 30);
         
         assertThat(trend).hasSize(30);
         // Trend should continue downwards
@@ -65,17 +65,17 @@ public class TrendAnalysisTest {
     void testTrendWithWeeklySeasonality() throws Exception {
         List<SliMetric> metrics = new ArrayList<>();
         LocalDateTime now = LocalDateTime.now().truncatedTo(java.time.temporal.ChronoUnit.DAYS);
-        // Target 0.95 -> 1-target = 0.05
-        // We want a constant trend (EB = 50%) but with weekly seasonality
-        // Base value = 0.975 (EB = (0.975-0.95)/0.05 * 100 = 50%)
+        // Target 95 -> 100-target = 5
+        // We want a roughly constant trend but with weekly seasonality
+        // Base value = 97.5 (EB = (97.5-95)/5 * 100 = 50%)
         for (int i = 0; i < 30; i++) {
             LocalDateTime ts = now.minusDays(29 - i);
-            double seasonality = (ts.getDayOfWeek().getValue() >= 6) ? -0.01 : 0.005; // lower on weekends
-            double value = 0.97 + seasonality; 
+            double seasonality = (ts.getDayOfWeek().getValue() >= 6) ? -1.0 : 0.5; // lower on weekends
+            double value = 97.0 + seasonality;
             metrics.add(new SliMetric(ts, value, null, null));
         }
 
-        List<Double> trend = invokeCalculateTrendPoints(metrics, 0.95, 30);
+        List<Double> trend = invokeCalculateTrendPoints(metrics, 95.0, 30);
         
         System.out.println("[DEBUG_LOG] Prophet-inspired Trend Projection: " + trend);
 

@@ -120,8 +120,8 @@ public class MetricFetchScheduler {
         if (Math.random() < simulatedFailureRate) {
             throw new RuntimeException("Mock connection error for " + ds.getName());
         }
-        // Return a realistic health value (0.9 to 1.0)
-        return 0.9 + (Math.random() * 0.1);
+        // Return a realistic health value (90 to 100 percent)
+        return 90.0 + (Math.random() * 10.0);
     }
 
     private double liveFetch(OpenSlo ds, OpenSlo sli) {

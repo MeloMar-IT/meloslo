@@ -18,6 +18,7 @@ public final class SloMath {
     public static final String WARNING = "Warning";
     public static final String BREACHING = "Breaching";
     public static final String NO_DATA = "No data";
+    public static final String UNKNOWN = "Unknown";
 
     private SloMath() {
     }
@@ -36,10 +37,18 @@ public final class SloMath {
         return count == 0 ? null : sum / count;
     }
 
-    /** (value - target) / (1 - target) * 100, or 100 if target >= 1; null if value is null. */
-    public static Double errorBudget(Double value, double target) {
-        if (value == null) return null;
-        return (1.0 - target > 0) ? (value - target) / (1.0 - target) * 100 : 100.0;
+    /**
+     * (value - target) / (100 - target) * 100 on the 0 to 100 scale; null if there is no value
+     * or the target is invalid (null).
+     */
+    public static Double errorBudget(Double value, Double target) {
+        if (value == null || target == null) return null;
+        return SliScale.errorBudget(value, target);
+    }
+
+    /** Status of an SLO: Unknown for an invalid target, No data without samples, else by error budget. */
+    public static String status(Double errorBudget, Double target) {
+        return target == null ? UNKNOWN : status(errorBudget);
     }
 
     public static String status(Double errorBudget) {
