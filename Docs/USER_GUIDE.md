@@ -16,9 +16,11 @@ Standard users only see, create, update and delete records in their own departme
 
 ![Login Screen](Screenshots/Screenshot%202026-04-06%20at%2008.42.34.png)
 
-*   **Default Administrator** (test mode only): `admin` / `admin`
-*   **Test User** (test mode only): `testuser` / `testuser`
+*   **Default Administrator** (test mode only): `admin` / `admin` (role `ADMIN`)
+*   **Test User** (test mode only): `testuser` / `testuser` (role `USER`)
 *   **Live mode**: no fixed password. The `admin` password comes from `APP_ADMIN_INITIAL_PASSWORD` (property `app.admin.initial-password`). If it is not set, a random password is logged once at WARN level on first startup. Change it after the first login.
+
+Access rights come from the user's stored role, not the username. In live mode, the `admin` account must change its password at first login. Until you do, the application shows a password change dialog and you are logged out after changing it.
 
 ### 1.2 Configuration Modes (Test vs Live)
 
@@ -137,6 +139,11 @@ Generate professional PDF reports that aggregate performance data over the last 
 
 ### 6.1 User Administration
 Administrators can manage user accounts, roles, and departmental access restrictions.
+
+- **Role**: Choose `Administrator` or `User` when creating or editing a user. Only administrators can change roles. The last administrator cannot be demoted or deleted.
+- **Departments**: Leave blank to see all departments. Separate multiple departments with commas.
+- **Changing a user**: Changing a user's role, password, or username, or deleting the user, logs that user out of open sessions.
+- **Your own password**: Every user can change their own password. Your role and departments are not affected.
 
 ![User Admin](Screenshots/Screenshot%202026-04-06%20at%2008.44.13.png)
 

@@ -1,5 +1,6 @@
 package com.example.meloslo;
 
+import com.example.meloslo.model.Role;
 import com.example.meloslo.model.User;
 import com.example.meloslo.repository.UserRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -24,7 +25,7 @@ public abstract class BaseFunctionalTest {
     void setupBase() {
         userRepository.deleteAll();
         // Create a default admin user for tests
-        User admin = new User("admin", passwordEncoder.encode("admin"), "admin@example.com", "IT");
+        User admin = new User("admin", passwordEncoder.encode("admin"), "admin@example.com", "IT", Role.ADMIN);
         userRepository.save(admin);
         
         // Create a default regular user

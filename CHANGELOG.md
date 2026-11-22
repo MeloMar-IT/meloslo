@@ -24,10 +24,19 @@
 - `DashboardStats` includes a `noDataSlos` count.
 - The simulated failure rate is configurable with `app.datasource.simulated-failure-rate` (default `0.03`).
 - Spring Boot is upgraded from the end-of-life 3.2.0 to 3.5.7, which brings Spring Framework 6.2 and Spring Security 6.5. The 3.2.0 line had published CVEs, including in `UriComponentsBuilder` (CVE-2024-22243, CVE-2024-22259, CVE-2024-22262) (#43).
+- User management is restricted to administrators. Access rights come from a stored `role` column (`ADMIN` or `USER`) instead of the username `admin` (#36).
+- Users can change their own password through `PUT /api/v1/users/me/password`. This is the only user endpoint open to non-admins besides `GET /api/v1/users/me`.
+- Creating and updating users validates input. Unknown user ids return 404, duplicate usernames return 409, and demoting or deleting the last administrator returns 409.
+- Passwords must be 8–128 characters.
+- Changing a user's role, password, or username, or deleting the user, ends that user's open sessions.
 
 ### Fixed
 - Restarting in test mode no longer wipes all records and users when a demo record was renamed or deleted, the `testuser` account was removed, or an SLI has fewer than 30 metrics, including SLIs created by users (#40).
 - A failed metric fetch no longer stores a `0.0` sample, which could breach an SLO and fire a false alert. The failure is recorded on the SLI in `last_fetch_failure_time` and `last_fetch_error` instead.
+- A user could take over the administrator account by changing their username to `admin`, or by updating the admin account through the API (#36).
+
+### Migration
+- Existing users without a role are migrated at startup. `admin` becomes `ADMIN` and must change its password in live mode. All other users become `USER` (#36).
 
 ## [0.1.0] - 2026-04-05
 ### Added

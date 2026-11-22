@@ -1,6 +1,7 @@
 package com.example.meloslo.config;
 
 import com.example.meloslo.model.OpenSlo;
+import com.example.meloslo.model.Role;
 import com.example.meloslo.model.User;
 import com.example.meloslo.repository.MetricRepository;
 import com.example.meloslo.repository.OpenSloRepository;
@@ -15,10 +16,11 @@ import org.springframework.boot.CommandLineRunner;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.util.ReflectionTestUtils;
 
+import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
@@ -88,6 +90,49 @@ class DataInitializerTest {
     }
 
     @Test
+    void liveModeCreatesAdminWithAdminRole() throws Exception {
+        when(userRepository.findByUsername("admin")).thenReturn(Optional.empty());
+
+        liveRunner().run();
+
+        verify(userRepository).save(argThat(u -> "admin".equals(u.getUsername()) && u.getRole() == Role.ADMIN));
+    }
+
+    @Test
+    void backfillAssignsRolesAndFlagsAdminInLiveMode() throws Exception {
+        User admin = new User("admin", "h", "a@example.com", null);
+        admin.setRole(null);
+        User bob = new User("bob", "h", "b@example.com", null);
+        bob.setRole(null);
+        User carol = new User("carol", "h", "c@example.com", null, Role.ADMIN);
+        when(userRepository.findAll()).thenReturn(List.of(admin, bob, carol));
+        when(userRepository.findByUsername("admin")).thenReturn(Optional.of(admin));
+
+        liveRunner().run();
+
+        assertEquals(Role.ADMIN, admin.getRole());
+        assertTrue(admin.isPasswordChangeRequired());
+        assertEquals(Role.USER, bob.getRole());
+        assertFalse(bob.isPasswordChangeRequired());
+        assertEquals(Role.ADMIN, carol.getRole());
+        verify(userRepository, never()).save(carol);
+    }
+
+    @Test
+    void backfillDoesNotFlagAdminInTestMode() throws Exception {
+        User admin = new User("admin", "h", "a@example.com", null);
+        admin.setRole(null);
+        when(userRepository.findAll()).thenReturn(List.of(admin));
+        CommandLineRunner runner = testRunner(false);
+        nonEmptyDatabase();
+
+        runner.run();
+
+        assertEquals(Role.ADMIN, admin.getRole());
+        assertFalse(admin.isPasswordChangeRequired());
+    }
+
+    @Test
     void shouldMigrateNormallyOnRetryAfterFailure() throws Exception {
         when(userRepository.findByUsername("admin")).thenReturn(Optional.empty());
         when(metricRepository.convertLegacyFractionValues())
@@ -154,6 +199,18 @@ class DataInitializerTest {
         verify(userRepository, never()).save(any(User.class));
         verifyNoInteractions(passwordEncoder);
         verifyNoDemoDataTouched();
+    }
+
+    @Test
+    void liveModeWithRenamedAdminDoesNotRecreateAdmin() throws Exception {
+        when(userRepository.count()).thenReturn(2L);
+        when(userRepository.findByUsername("admin")).thenReturn(Optional.empty());
+        CommandLineRunner runner = liveRunner();
+
+        runner.run();
+
+        verify(userRepository, never()).save(any(User.class));
+        verifyNoInteractions(passwordEncoder);
     }
 
     @Test

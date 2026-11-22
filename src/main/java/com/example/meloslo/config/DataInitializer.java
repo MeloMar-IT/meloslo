@@ -2,6 +2,7 @@ package com.example.meloslo.config;
 
 import com.example.meloslo.model.SliMetric;
 import com.example.meloslo.model.OpenSlo;
+import com.example.meloslo.model.Role;
 import com.example.meloslo.model.User;
 import com.example.meloslo.repository.MetricRepository;
 import com.example.meloslo.repository.OpenSloRepository;
@@ -48,7 +49,13 @@ public class DataInitializer {
         return args -> {
             migrateLegacyMetricScale(metricRepository);
             log.info("Starting startup database verification...");
-            if ("live".equalsIgnoreCase(datasourceMode)) {
+            boolean live = "live".equalsIgnoreCase(datasourceMode);
+            try {
+                backfillRoles(userRepository, live);
+            } catch (RuntimeException e) {
+                log.error("Role backfill failed: {}", e.getMessage());
+            }
+            if (live) {
                 if (seedRequested) {
                     log.warn("app.seed=true is ignored in live mode.");
                 }
@@ -113,17 +120,17 @@ public class DataInitializer {
         return saved;
     }
 
-    private void ensureUser(UserRepository userRepository, PasswordEncoder passwordEncoder, String username, String rawPassword, String email, String departments) {
+    private void ensureUser(UserRepository userRepository, PasswordEncoder passwordEncoder, String username, String rawPassword, String email, String departments, Role role) {
         if (userRepository.findByUsername(username).isEmpty()) {
-            userRepository.save(new User(username, passwordEncoder.encode(rawPassword), email, departments));
+            userRepository.save(new User(username, passwordEncoder.encode(rawPassword), email, departments, role));
         }
     }
 
     void seedDemoData(OpenSloRepository repository, MetricRepository metricRepository, UserRepository userRepository, PasswordEncoder passwordEncoder) {
         List<OpenSlo> created = new ArrayList<>();
 
-        ensureUser(userRepository, passwordEncoder, "admin", "admin", "admin@meloslo.com", null);
-        ensureUser(userRepository, passwordEncoder, "testuser", "testuser", "testuser@finance.com", "Finance,Engineering");
+        ensureUser(userRepository, passwordEncoder, "admin", "admin", "admin@meloslo.com", null, Role.ADMIN);
+        ensureUser(userRepository, passwordEncoder, "testuser", "testuser", "testuser@finance.com", "Finance,Engineering", Role.USER);
 
         // 1. Create a Business Service
         OpenSlo paymentService = new OpenSlo("openslo/v1", "BusinessService", "payment-service", "Payment Service", 
@@ -213,12 +220,31 @@ public class DataInitializer {
     }
 
     void ensureLiveAdmin(UserRepository userRepository, PasswordEncoder passwordEncoder) {
-        if (userRepository.findByUsername("admin").isPresent()) {
-            log.info("LIVE mode: admin exists, no users created.");
+        // Only an uninitialized database gets an admin: after a rename or delete of "admin" none is recreated.
+        if (userRepository.count() > 0 || userRepository.findByUsername("admin").isPresent()) {
+            log.info("LIVE mode: users exist, no users created.");
             return;
         }
         String password = resolveInitialAdminPassword();
-        userRepository.save(new User("admin", passwordEncoder.encode(password), "admin@meloslo.com", null));
+        userRepository.save(new User("admin", passwordEncoder.encode(password), "admin@meloslo.com", null, Role.ADMIN));
+    }
+
+    /** Gives every user without a role one: "admin" becomes ADMIN, everyone else USER. */
+    private void backfillRoles(UserRepository userRepository, boolean live) {
+        for (User user : userRepository.findAll()) {
+            if (user.getRole() != null) {
+                continue;
+            }
+            if ("admin".equals(user.getUsername())) {
+                user.setRole(Role.ADMIN);
+                // In live mode the promoted admin may still have the default password.
+                user.setPasswordChangeRequired(live);
+                log.warn("Migrated user 'admin' to role ADMIN{}", live ? "; password change required" : "");
+            } else {
+                user.setRole(Role.USER);
+            }
+            userRepository.save(user);
+        }
     }
 
     String resolveInitialAdminPassword() {
