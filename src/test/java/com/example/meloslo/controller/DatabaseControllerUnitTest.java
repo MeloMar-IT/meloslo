@@ -4,6 +4,8 @@ import com.example.meloslo.repository.UserRepository;
 import com.example.meloslo.config.SecurityConfig;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
@@ -20,6 +22,7 @@ import java.util.Map;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -42,41 +45,19 @@ public class DatabaseControllerUnitTest {
     @Autowired
     private ObjectMapper objectMapper;
 
-    @Test
-    void shouldExecuteSelectQuery() throws Exception {
-        Map<String, Object> row = Collections.singletonMap("name", "TestSLO");
-        when(jdbcTemplate.queryForList(anyString())).thenReturn(Collections.singletonList(row));
-
-        DatabaseController.QueryRequest request = new DatabaseController.QueryRequest();
-        request.setSql("SELECT * FROM openslo_records");
-
+    @ParameterizedTest
+    @ValueSource(strings = {
+        "SELECT FILE_READ('/etc/passwd')",
+        "SELECT CSVWRITE('/tmp/meloslo.csv','SELECT 1')",
+        "CREATE ALIAS EXEC AS 'String e(String c) throws Exception { return c; }'"
+    })
+    void queryEndpointIsGoneAndRunsNoSql(String sql) throws Exception {
         mockMvc.perform(post("/api/v1/database/query")
                 .contentType(MediaType.APPLICATION_JSON)
-                .content(objectMapper.writeValueAsString(request)))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$[0].name").value("TestSLO"));
-    }
+                .content(objectMapper.writeValueAsString(Map.of("sql", sql))))
+                .andExpect(status().is4xxClientError());
 
-    @Test
-    void shouldRejectNonSelectQuery() throws Exception {
-        DatabaseController.QueryRequest request = new DatabaseController.QueryRequest();
-        request.setSql("DELETE FROM openslo_records");
-
-        mockMvc.perform(post("/api/v1/database/query")
-                .contentType(MediaType.APPLICATION_JSON)
-                .content(objectMapper.writeValueAsString(request)))
-                .andExpect(status().isBadRequest());
-    }
-
-    @Test
-    void shouldRejectEmptyQuery() throws Exception {
-        DatabaseController.QueryRequest request = new DatabaseController.QueryRequest();
-        request.setSql("");
-
-        mockMvc.perform(post("/api/v1/database/query")
-                .contentType(MediaType.APPLICATION_JSON)
-                .content(objectMapper.writeValueAsString(request)))
-                .andExpect(status().isBadRequest());
+        verifyNoInteractions(jdbcTemplate);
     }
 
     @Test

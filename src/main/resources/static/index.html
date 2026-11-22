@@ -150,7 +150,7 @@
                     <a href="#" class="flex items-center space-x-3 px-3 py-2 rounded-lg text-slate-600 hover:bg-slate-50 transition-colors"
                        :class="{ 'sidebar-active': currentView === 'query' }" @click="currentView = 'query'" v-if="isAdmin">
                         <i class="fas fa-terminal w-5"></i>
-                        <span class="font-medium">Query Tool</span>
+                        <span class="font-medium">Database Tables</span>
                     </a>
                     <a href="#" class="flex items-center space-x-3 px-3 py-2 rounded-lg text-slate-600 hover:bg-slate-50 transition-colors"
                        :class="{ 'sidebar-active': currentView === 'users' }" @click="currentView = 'users'" v-if="isAdmin">
@@ -911,7 +911,7 @@
                                             </div>
                                             <div>
                                                 <h4 class="font-bold text-slate-800 text-sm">Role: Administrator (Full Access)</h4>
-                                                <p class="text-[11px] text-slate-500">Users without an assigned department can see and manage all records across the entire application and access the User Admin and Database Query tools.</p>
+                                                <p class="text-[11px] text-slate-500">Users without an assigned department can see and manage all records across the entire application and access the User Admin and Database Tables tools.</p>
                                             </div>
                                         </div>
                                         <div class="flex items-start space-x-3">
@@ -925,7 +925,7 @@
                                         </div>
                                     </div>
                                     <div class="mt-4 p-4 bg-white rounded-xl border border-slate-200">
-                                        <h4 class="font-bold text-xs text-slate-400 uppercase tracking-widest mb-2">Test Accounts:</h4>
+                                        <h4 class="font-bold text-xs text-slate-400 uppercase tracking-widest mb-2">Test Accounts (test mode only):</h4>
                                         <div class="grid grid-cols-2 gap-4 text-xs">
                                             <div class="bg-slate-50 p-2 rounded-lg border border-slate-100">
                                                 <span class="font-bold text-slate-700">Admin:</span> admin / admin
@@ -973,7 +973,7 @@
                                     </div>
                                     <div>
                                         <h4 class="font-bold text-slate-800 mb-1">8. Database Maintenance</h4>
-                                        <p class="text-sm text-slate-600">Administrators can use the 'Query Tool' to run <code>SELECT</code> queries against the internal database to audit records or inspect table structures.</p>
+                                        <p class="text-sm text-slate-600">Administrators can use the 'Database Tables' view to browse the internal tables and inspect their structure.</p>
                                     </div>
                                     <div>
                                         <h4 class="font-bold text-slate-800 mb-1">9. Thread Stability</h4>
@@ -1217,45 +1217,8 @@ spec:
                                 </div>
                             </div>
 
-                            <!-- Query Area -->
+                            <!-- Table Structure Area -->
                             <div class="col-span-12 lg:col-span-9 space-y-6">
-                                <div class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
-                                    <h2 class="text-2xl font-bold text-slate-800 mb-4 flex items-center">
-                                        <i class="fas fa-database text-blue-600 mr-3"></i> SQL Query Tool
-                                    </h2>
-                                    <p class="text-slate-500 text-sm mb-6">
-                                        Execute raw SQL queries against the H2 database. For security reasons, only <span class="font-bold text-slate-700">SELECT</span> statements are permitted.
-                                    </p>
-                                    
-                                    <div class="space-y-4">
-                                        <div>
-                                            <label class="block text-sm font-bold text-slate-700 mb-2 uppercase tracking-wider">SQL Statement</label>
-                                            <textarea 
-                                                v-model="querySql" 
-                                                class="w-full h-32 p-4 bg-slate-900 text-emerald-400 font-mono text-sm rounded-xl border border-slate-700 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all shadow-inner"
-                                                placeholder="SELECT * FROM openslo_records LIMIT 10"
-                                            ></textarea>
-                                        </div>
-                                        
-                                        <div class="flex items-center justify-between">
-                                            <div class="flex space-x-2">
-                                                <button @click="querySql = 'SELECT * FROM openslo_records'" class="px-3 py-1 bg-slate-100 hover:bg-slate-200 text-slate-600 text-[11px] font-bold rounded-lg transition-colors uppercase">All Records</button>
-                                                <button @click="querySql = 'SELECT * FROM sli_metric ORDER BY timestamp DESC LIMIT 50'" class="px-3 py-1 bg-slate-100 hover:bg-slate-200 text-slate-600 text-[11px] font-bold rounded-lg transition-colors uppercase">Recent Metrics</button>
-                                                <button @click="querySql = 'SELECT kind, count(*) FROM openslo_records GROUP BY kind'" class="px-3 py-1 bg-slate-100 hover:bg-slate-200 text-slate-600 text-[11px] font-bold rounded-lg transition-colors uppercase">Stats</button>
-                                            </div>
-                                            <button 
-                                                @click="runQuery" 
-                                                :disabled="isQueryLoading"
-                                                class="px-6 py-2 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 transition-all shadow-lg shadow-blue-200 flex items-center disabled:opacity-50"
-                                            >
-                                                <i v-if="isQueryLoading" class="fas fa-spinner fa-spin mr-2"></i>
-                                                <i v-else class="fas fa-play mr-2 text-xs"></i>
-                                                Execute Query
-                                            </button>
-                                        </div>
-                                    </div>
-                                </div>
-
                                 <!-- Table Structure View -->
                                 <div v-if="selectedTableStructure" class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden animate__animated animate__fadeIn">
                                     <div class="p-4 border-b border-slate-100 bg-slate-50/50 flex justify-between items-center">
@@ -1264,7 +1227,6 @@ spec:
                                             <span class="text-xs font-bold text-slate-500 uppercase tracking-widest">Structure: {{ selectedTableName }}</span>
                                         </div>
                                         <div class="flex space-x-2">
-                                            <button @click="querySql = 'SELECT * FROM ' + selectedTableName; runQuery();" class="text-blue-600 hover:text-blue-800 text-[10px] font-bold uppercase">Query Table</button>
                                             <button @click="selectedTableStructure = null; selectedTableName = ''" class="text-slate-400 hover:text-slate-600 text-xs font-medium"><i class="fas fa-times"></i></button>
                                         </div>
                                     </div>
@@ -1294,47 +1256,12 @@ spec:
                                     </div>
                                 </div>
 
-                                <!-- Query Results -->
-                                <div v-if="queryError" class="bg-red-50 border border-red-100 text-red-600 p-4 rounded-xl flex items-start space-x-3">
-                                    <i class="fas fa-exclamation-triangle mt-1"></i>
-                                    <div>
-                                        <p class="font-bold text-sm">Query Execution Failed</p>
-                                        <p class="text-xs opacity-90">{{ queryError }}</p>
-                                    </div>
-                                </div>
-
-                                <div v-if="queryResults.length > 0" class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-                                    <div class="p-4 border-b border-slate-100 bg-slate-50/50 flex justify-between items-center">
-                                        <span class="text-xs font-bold text-slate-500 uppercase tracking-widest">Results ({{ queryResults.length }})</span>
-                                        <button @click="queryResults = []" class="text-slate-400 hover:text-slate-600 text-xs font-medium">Clear</button>
-                                    </div>
-                                    <div class="overflow-x-auto max-h-[500px]">
-                                        <table class="w-full text-left border-collapse">
-                                            <thead class="bg-white sticky top-0 shadow-sm">
-                                                <tr>
-                                                    <th v-for="key in Object.keys(queryResults[0])" :key="key" class="px-6 py-4 text-[11px] font-bold text-slate-500 uppercase tracking-wider border-b border-slate-100">
-                                                        {{ key }}
-                                                    </th>
-                                                </tr>
-                                            </thead>
-                                            <tbody class="divide-y divide-slate-50">
-                                                <tr v-for="(row, idx) in queryResults" :key="idx" class="hover:bg-slate-50 transition-colors">
-                                                    <td v-for="key in Object.keys(queryResults[0])" :key="key" class="px-6 py-4 text-sm text-slate-600 whitespace-nowrap">
-                                                        <div class="max-w-xs truncate" :title="row[key]">
-                                                            {{ row[key] }}
-                                                        </div>
-                                                    </td>
-                                                </tr>
-                                            </tbody>
-                                        </table>
-                                    </div>
-                                </div>
-                                <div v-else-if="!isQueryLoading && !queryError && querySql && !selectedTableStructure" class="bg-white p-12 rounded-2xl border border-slate-200 shadow-sm text-center">
+                                <div v-else class="bg-white p-12 rounded-2xl border border-slate-200 shadow-sm text-center">
                                     <div class="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center text-slate-300 mx-auto mb-4">
                                         <i class="fas fa-table text-2xl"></i>
                                     </div>
-                                    <h3 class="text-slate-800 font-bold">No data to display</h3>
-                                    <p class="text-slate-500 text-sm">Execute a query or select a table to see details here.</p>
+                                    <h3 class="text-slate-800 font-bold">No table selected</h3>
+                                    <p class="text-slate-500 text-sm">Select a table to see its structure.</p>
                                 </div>
                             </div>
                         </div>
@@ -1869,10 +1796,6 @@ spec:
                 const selectedServiceReport = ref(null);
                 const selectedDs = ref(null);
                 const notification = ref(null);
-                const querySql = ref('SELECT * FROM openslo_records LIMIT 10');
-                const queryResults = ref([]);
-                const queryError = ref('');
-                const isQueryLoading = ref(false);
                 const dbTables = ref([]);
                 const selectedTableStructure = ref(null);
 
@@ -1976,14 +1899,6 @@ spec:
                         usage: 'Used by the frontend to determine permissions and show user profile details.',
                         requestJson: null,
                         responseJson: '{\n  "username": "admin",\n  "email": "admin@example.com",\n  "departments": "Finance,Engineering"\n}'
-                    },
-                    {
-                        method: 'POST',
-                        path: '/api/v1/database/query',
-                        description: 'Execute a raw SQL SELECT query (Admin Only).',
-                        usage: 'Allows direct database inspection. Restricted to SELECT statements for safety.',
-                        requestJson: '{\n  "sql": "SELECT * FROM openslo_records"\n}',
-                        responseJson: '[\n  {\n    "ID": 1,\n    "NAME": "api-latency",\n    ...\n  }\n]'
                     },
                     {
                         method: 'POST',
@@ -2179,7 +2094,7 @@ spec:
                     if (currentView.value === 'sli-details') return 'SLI Details';
                     if (currentView.value === 'service-details') return 'Business Services Deatils';
                     if (currentView.value === 'docs') return 'Documentation';
-                    if (currentView.value === 'query') return 'Query Tool';
+                    if (currentView.value === 'query') return 'Database Tables';
                     if (currentView.value === 'reports') return 'Annual Reports';
                     return '';
                 });
@@ -2824,30 +2739,6 @@ spec:
                     }
                 };
 
-                const runQuery = async () => {
-                    isQueryLoading.value = true;
-                    queryError.value = '';
-                    queryResults.value = [];
-                    try {
-                        const response = await fetch('/api/v1/database/query', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ sql: querySql.value }),
-                            credentials: 'same-origin'
-                        });
-                        const data = await response.json();
-                        if (response.ok) {
-                            queryResults.value = data;
-                        } else {
-                            queryError.value = data.message || 'Failed to execute query';
-                        }
-                    } catch (err) {
-                        queryError.value = 'An error occurred while executing the query';
-                    } finally {
-                        isQueryLoading.value = false;
-                    }
-                };
-
                 const fetchTables = () => {
                     fetch('/api/v1/database/tables', { credentials: 'same-origin' })
                         .then(res => res.json())
@@ -2861,8 +2752,6 @@ spec:
                         .then(res => res.json())
                         .then(data => {
                             selectedTableStructure.value = data;
-                            queryResults.value = [];
-                            queryError.value = '';
                         })
                         .catch(err => console.error('Failed to fetch table structure', err));
                 };
@@ -2930,10 +2819,6 @@ spec:
                     selectedServiceReport,
                     selectedDs,
                     notification,
-                    querySql,
-                    queryResults,
-                    queryError,
-                    isQueryLoading,
                     dbTables,
                     selectedTableStructure,
                     selectedTableName,
@@ -2941,7 +2826,6 @@ spec:
                     alertingTemplates,
                     dataSourceTemplates,
                     applyTemplate,
-                    runQuery,
                     fetchTables,
                     viewTableStructure,
                     openCreateModal,

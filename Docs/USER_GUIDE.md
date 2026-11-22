@@ -14,15 +14,16 @@ To access MeloSlo, you must first log in using your credentials. The platform su
 
 ![Login Screen](Screenshots/Screenshot%202026-04-06%20at%2008.42.34.png)
 
-*   **Default Administrator**: `admin` / `admin`
-*   **Test User**: `testuser` / `testuser`
+*   **Default Administrator** (test mode only): `admin` / `admin`
+*   **Test User** (test mode only): `testuser` / `testuser`
+*   **Live mode**: no fixed password. The `admin` password comes from `APP_ADMIN_INITIAL_PASSWORD` (property `app.admin.initial-password`). If it is not set, a random password is logged once at WARN level on first startup. Change it after the first login.
 
 ### 1.2 Configuration Modes (Test vs Live)
 
 The application features a configuration option to toggle between a test environment and a live environment. This is controlled by the `app.datasource.mode` property.
 
 - **Test Mode**: (`app.datasource.mode=test`) Use this mode to explore the application with simulated data. The system will automatically populate the database with sample SLOs, SLIs, and metrics.
-- **Live Mode**: (`app.datasource.mode=live`) Use this mode for real-world monitoring. In live mode, the system expects to connect to the actual endpoints defined in your DataSources to fetch real-time metrics. Automated sample data generation is disabled to preserve your production configuration.
+- **Live Mode**: (`app.datasource.mode=live`) Use this mode for real-world monitoring. In live mode, the system expects to connect to the actual endpoints defined in your DataSources to fetch real-time metrics. Automated sample data generation is disabled to preserve your production configuration. Live mode creates only the `admin` user (if missing) and never creates `testuser`.
 
 To change the mode, modify `src/main/resources/application.properties`:
 ```properties
@@ -39,6 +40,8 @@ MeloSlo supports multi-environment configuration (DTAP) using Spring Boot's buil
 Environment-specific settings can be defined in separate property files:
 - `application-dev.properties`: Settings for local development.
 - `application-prod.properties`: Settings for production deployments.
+
+The H2 database console (`/h2-console`) is off by default. The `dev` profile turns it on for local use (admin role required, remote access disabled). In the default and `prod` profiles it returns 404.
 
 To activate a specific profile at startup:
 ```bash
@@ -132,10 +135,8 @@ Administrators can manage user accounts, roles, and departmental access restrict
 
 ![User Admin](Screenshots/Screenshot%202026-04-06%20at%2008.44.13.png)
 
-### 6.2 Database Query Tool
-A tool for administrators to execute raw SQL `SELECT` queries for deep inspection of system data.
-
-![Database Query Tool](Screenshots/Screenshot%202026-04-06%20at%2008.44.07.png)
+### 6.2 Database Tables
+Administrators can browse the internal database tables and view each table's structure. The free-form SQL query console has been removed for security reasons.
 
 ---
 

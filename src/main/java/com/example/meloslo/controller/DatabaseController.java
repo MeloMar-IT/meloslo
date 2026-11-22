@@ -21,28 +21,6 @@ public class DatabaseController {
         this.jdbcTemplate = jdbcTemplate;
     }
 
-    @PostMapping("/query")
-    public List<Map<String, Object>> executeQuery(@RequestBody QueryRequest request) {
-        String sql = request.getSql();
-        if (sql == null || sql.trim().isEmpty()) {
-            throw new IllegalArgumentException("SQL query cannot be empty");
-        }
-        
-        String cleanSql = sql.trim().toUpperCase();
-        
-        // Block dangerous keywords even within strings to be safe (very basic)
-        if (cleanSql.contains("DELETE") || cleanSql.contains("DROP") || cleanSql.contains("UPDATE") || 
-            cleanSql.contains("INSERT") || cleanSql.contains("TRUNCATE") || cleanSql.contains("ALTER")) {
-             throw new IllegalArgumentException("Only SELECT queries are allowed for security reasons.");
-        }
-
-        if (!cleanSql.startsWith("SELECT")) {
-             throw new IllegalArgumentException("Only SELECT queries are allowed.");
-        }
-
-        return jdbcTemplate.queryForList(sql);
-    }
-
     @GetMapping("/tables")
     public List<String> getTables() {
         return jdbcTemplate.queryForList(
@@ -72,17 +50,5 @@ public class DatabaseController {
         Map<String, String> response = new HashMap<>();
         response.put("message", e.getMessage());
         return new ResponseEntity<>(response, HttpStatus.BAD_REQUEST);
-    }
-
-    public static class QueryRequest {
-        private String sql;
-
-        public String getSql() {
-            return sql;
-        }
-
-        public void setSql(String sql) {
-            this.sql = sql;
-        }
     }
 }
