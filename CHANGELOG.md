@@ -1,6 +1,9 @@
 # Changelog
 
 ## [Unreleased]
+### Added
+- Dependabot configuration (`.github/dependabot.yml`) that checks Maven and GitHub Actions dependencies weekly and groups minor and patch updates (#43).
+
 ### Security
 - The H2 console (`/h2-console`) is off by default and enabled only under the `dev` profile, where it requires the ADMIN role (#35).
 - Live mode no longer creates `admin/admin` or `testuser/testuser`. It creates only `admin`, with a password from `APP_ADMIN_INITIAL_PASSWORD` or a random one logged once (#35).
@@ -15,6 +18,7 @@
 - Creating a record in, or moving a record to, a department the caller is not in returns 403.
 - `POST /api/v1/openslo` with an `id` in the body returns 400.
 - `DELETE /api/v1/openslo/{id}` for an unknown id returns 404 instead of 204.
+- Spring Boot is upgraded from the end-of-life 3.2.0 to 3.5.7, which brings Spring Framework 6.2 and Spring Security 6.5. The 3.2.0 line had published CVEs, including in `UriComponentsBuilder` (CVE-2024-22243, CVE-2024-22259, CVE-2024-22262) (#43).
 
 ## [0.1.0] - 2026-04-05
 ### Added
