@@ -24,7 +24,7 @@ Standard users only see, create, update and delete records in their own departme
 
 The application features a configuration option to toggle between a test environment and a live environment. This is controlled by the `app.datasource.mode` property.
 
-- **Test Mode**: (`app.datasource.mode=test`) Use this mode to explore the application with simulated data. The system will automatically populate the database with sample SLOs, SLIs, and metrics.
+- **Test Mode**: (`app.datasource.mode=test`) Use this mode to explore the application with simulated data. If the database is empty, the system populates it with sample SLOs, SLIs, and metrics. A database that already has data is left unchanged on restart. To add missing sample records to an existing database, set `app.seed=true`; nothing is deleted.
 - **Live Mode**: (`app.datasource.mode=live`) Use this mode for real-world monitoring. In live mode, the system expects to connect to the actual endpoints defined in your DataSources to fetch real-time metrics. Automated sample data generation is disabled to preserve your production configuration. Live mode creates only the `admin` user (if missing) and never creates `testuser`.
 
 To change the mode, modify `src/main/resources/application.properties`:

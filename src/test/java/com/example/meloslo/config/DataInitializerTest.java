@@ -113,34 +113,180 @@ class DataInitializerTest {
             .isNotEqualTo(dataInitializer.resolveInitialAdminPassword());
     }
 
-    @Test
-    void shouldReloadFullDatabaseInTestModeWhenNeeded() throws Exception {
-        // Arrange
+    private CommandLineRunner testRunner(boolean seed) {
         ReflectionTestUtils.setField(dataInitializer, "datasourceMode", "test");
+        ReflectionTestUtils.setField(dataInitializer, "seedRequested", seed);
+        lenient().when(passwordEncoder.encode(anyString())).thenReturn("encodedPassword");
+        lenient().when(openSloRepository.save(any(OpenSlo.class))).thenAnswer(inv -> inv.getArgument(0));
+        lenient().when(openSloRepository.findByName(anyString())).thenReturn(Optional.empty());
+        lenient().when(userRepository.findByUsername(anyString())).thenReturn(Optional.empty());
+        return dataInitializer.initDatabase(openSloRepository, metricRepository, userRepository, passwordEncoder);
+    }
 
-        // Mock that admin user is missing to trigger initialization
-        when(userRepository.findByUsername("admin")).thenReturn(Optional.empty());
-        when(passwordEncoder.encode(anyString())).thenReturn("encodedPassword");
+    private void nonEmptyDatabase() {
+        when(openSloRepository.count()).thenReturn(20L);
+        when(userRepository.count()).thenReturn(3L);
+    }
 
-        // Return dummy objects to avoid NPE in reloadDatabase
-        OpenSlo dummySlo = new OpenSlo();
-        dummySlo.setName("dummy");
-        dummySlo.setDepartment("Engineering");
-        dummySlo.setManager("Manager");
-        when(openSloRepository.save(any(OpenSlo.class))).thenReturn(dummySlo);
+    private void verifyNothingDeleted() {
+        verify(openSloRepository, never()).deleteAll();
+        verify(openSloRepository, never()).delete(any());
+        verify(openSloRepository, never()).deleteById(any());
+        verify(metricRepository, never()).deleteAll();
+        verify(metricRepository, never()).deleteBySli(any());
+        verify(userRepository, never()).deleteAll();
+    }
 
-        CommandLineRunner runner = dataInitializer.initDatabase(openSloRepository, metricRepository, userRepository, passwordEncoder);
+    private void verifyNothingSaved() {
+        verify(openSloRepository, never()).save(any());
+        verify(openSloRepository, never()).saveAll(any());
+        verify(metricRepository, never()).save(any());
+        verify(userRepository, never()).save(any());
+    }
 
-        // Act
+    private static String kindOf(String name) {
+        if ("payment-service".equals(name) || "engineering-core".equals(name)) return "BusinessService";
+        if ("prometheus-prod".equals(name)) return "DataSource";
+        if (name.endsWith("-sli")) return "SLI";
+        if (name.endsWith("-alerts") || "slack-notifications".equals(name)) return "AlertingSource";
+        return "SLO";
+    }
+
+    private static OpenSlo existingRecord(String name, String kind) {
+        OpenSlo existing = new OpenSlo();
+        existing.setName(name);
+        existing.setKind(kind);
+        return existing;
+    }
+
+    private void existingRecordsExcept(String... missing) {
+        java.util.Set<String> skip = java.util.Set.of(missing);
+        for (String name : DataInitializer.SEED_RECORD_NAMES) {
+            if (!skip.contains(name)) {
+                when(openSloRepository.findByName(name)).thenReturn(Optional.of(existingRecord(name, kindOf(name))));
+            }
+        }
+    }
+
+    @Test
+    void seedFlagSkipsDemoRecordsThatConflictWithExistingKind() throws Exception {
+        CommandLineRunner runner = testRunner(true);
+        nonEmptyDatabase();
+        // Every seed name exists with the right kind, except a user-created SLI called payment-service
+        // and the three SLOs that depend on it, which are missing.
+        existingRecordsExcept("web-latency", "api-availability", "db-errors", "payment-service");
+        when(openSloRepository.findByName("payment-service")).thenReturn(Optional.of(existingRecord("payment-service", "SLI")));
+        when(userRepository.findByUsername("admin")).thenReturn(Optional.of(new User("admin", "h", "a@b.c", null)));
+        when(userRepository.findByUsername("testuser")).thenReturn(Optional.of(new User("testuser", "h", "t@b.c", null)));
+
         runner.run();
 
-        // Assert
-        // In TEST mode, it should reload the database
-        verify(userRepository).deleteAll();
-        verify(openSloRepository).deleteAll();
-        verify(metricRepository).deleteAll();
+        // The conflicting record is kept unchanged and its dependent SLOs are not created against it.
+        verifyNothingSaved();
+        verifyNothingDeleted();
+    }
 
-        // It should save OpenSlo records (test data)
-        verify(openSloRepository, atLeastOnce()).save(any());
+    @Test
+    void testModeSeedsEmptyDatabaseWithoutDeleting() throws Exception {
+        CommandLineRunner runner = testRunner(false);
+        when(openSloRepository.count()).thenReturn(0L);
+        when(userRepository.count()).thenReturn(0L);
+
+        runner.run();
+
+        ArgumentCaptor<OpenSlo> records = ArgumentCaptor.forClass(OpenSlo.class);
+        verify(openSloRepository, times(16)).save(records.capture());
+        assertThat(records.getAllValues()).extracting(OpenSlo::getName)
+            .containsExactlyInAnyOrderElementsOf(DataInitializer.SEED_RECORD_NAMES);
+        ArgumentCaptor<User> users = ArgumentCaptor.forClass(User.class);
+        verify(userRepository, times(2)).save(users.capture());
+        assertThat(users.getAllValues()).extracting(User::getUsername).containsExactly("admin", "testuser");
+        verify(metricRepository, times(150)).save(any());
+        verifyNothingDeleted();
+    }
+
+    @Test
+    void testModeWithExistingDataSkipsSeeding() throws Exception {
+        CommandLineRunner runner = testRunner(false);
+        nonEmptyDatabase();
+
+        runner.run();
+
+        verifyNothingSaved();
+        verifyNothingDeleted();
+        verify(metricRepository, never()).countBySli(any());
+    }
+
+    @Test
+    void testModeMissingSeedRecordWithoutFlagChangesNothing() throws Exception {
+        CommandLineRunner runner = testRunner(false);
+        nonEmptyDatabase();
+        existingRecordsExcept("latency-sli");
+
+        runner.run();
+
+        verifyNothingSaved();
+        verifyNothingDeleted();
+    }
+
+    @Test
+    void seedFlagAddsOnlyMissingRecords() throws Exception {
+        CommandLineRunner runner = testRunner(true);
+        nonEmptyDatabase();
+        existingRecordsExcept("discord-alerts", "latency-sli");
+        when(userRepository.findByUsername("admin")).thenReturn(Optional.of(new User("admin", "h", "a@b.c", null)));
+        when(userRepository.findByUsername("testuser")).thenReturn(Optional.of(new User("testuser", "h", "t@b.c", null)));
+
+        runner.run();
+
+        ArgumentCaptor<OpenSlo> records = ArgumentCaptor.forClass(OpenSlo.class);
+        verify(openSloRepository, times(2)).save(records.capture());
+        assertThat(records.getAllValues()).extracting(OpenSlo::getName)
+            .containsExactlyInAnyOrder("discord-alerts", "latency-sli");
+        ArgumentCaptor<com.example.meloslo.model.SliMetric> metrics =
+            ArgumentCaptor.forClass(com.example.meloslo.model.SliMetric.class);
+        verify(metricRepository, times(30)).save(metrics.capture());
+        assertThat(metrics.getAllValues()).allSatisfy(m -> assertThat(m.getSli().getName()).isEqualTo("latency-sli"));
+        verify(userRepository, never()).save(any());
+        verify(passwordEncoder, never()).encode(anyString());
+        verifyNothingDeleted();
+    }
+
+    @Test
+    void seedFlagRecreatesMissingTestuserOnly() throws Exception {
+        CommandLineRunner runner = testRunner(true);
+        nonEmptyDatabase();
+        existingRecordsExcept();
+        when(userRepository.findByUsername("admin")).thenReturn(Optional.of(new User("admin", "h", "a@b.c", null)));
+
+        runner.run();
+
+        verify(userRepository, times(1)).save(any(User.class));
+        verify(userRepository).save(argThat(user -> "testuser".equals(user.getUsername())));
+        verify(openSloRepository, never()).save(any());
+        verifyNothingDeleted();
+    }
+
+    @Test
+    void databaseCheckFailureSkipsSeeding() throws Exception {
+        CommandLineRunner runner = testRunner(false);
+        when(openSloRepository.count()).thenThrow(new RuntimeException("table missing"));
+
+        runner.run();
+
+        verifyNothingSaved();
+        verifyNothingDeleted();
+    }
+
+    @Test
+    void liveModeIgnoresSeedFlag() throws Exception {
+        ReflectionTestUtils.setField(dataInitializer, "seedRequested", true);
+        when(userRepository.findByUsername("admin")).thenReturn(Optional.empty());
+        CommandLineRunner runner = liveRunner();
+
+        runner.run();
+
+        verify(userRepository, times(1)).save(argThat(user -> "admin".equals(user.getUsername())));
+        verifyNoDemoDataTouched();
     }
 }

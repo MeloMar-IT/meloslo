@@ -15,6 +15,10 @@
 - Creating a record in, or moving a record to, a department the caller is not in returns 403.
 - `POST /api/v1/openslo` with an `id` in the body returns 400.
 - `DELETE /api/v1/openslo/{id}` for an unknown id returns 404 instead of 204.
+- Test mode seeds demo data only into an empty database. A restart no longer deletes or reloads existing data. New property `app.seed` (default `false`) adds only missing demo records and never deletes anything (#40).
+
+### Fixed
+- Restarting in test mode no longer wipes all records and users when a demo record was renamed or deleted, the `testuser` account was removed, or an SLI has fewer than 30 metrics, including SLIs created by users (#40).
 
 ## [0.1.0] - 2026-04-05
 ### Added

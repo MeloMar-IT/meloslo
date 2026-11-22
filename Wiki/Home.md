@@ -84,7 +84,7 @@ The application features a sidebar providing access to:
 
 The system behavior is controlled by the `app.datasource.mode` configuration in `application.properties`:
 
-- **`test` (Default)**: Generates simulated metric data (0.9–1.0 range). Re-initializes the database with sample data if state is invalid. Seeds the demo accounts `admin/admin` and `testuser/testuser`. Ideal for local development only.
+- **`test` (Default)**: Generates simulated metric data (0.9–1.0 range). Seeds sample data only into an empty database and never deletes existing data. Set `app.seed=true` to add missing demo records. Seeds the demo accounts `admin/admin` and `testuser/testuser`. Ideal for local development only.
 - **`live`**: Intended for connection to real external endpoints. Creates only the `admin` user, and only if missing. Its password comes from `APP_ADMIN_INITIAL_PASSWORD`, or is a random value logged once at WARN level. No `testuser` is created.
 
 ### H2 Console

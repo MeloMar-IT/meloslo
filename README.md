@@ -74,7 +74,7 @@ Table inspection remains available to administrators (see [Database Tables](#dat
 
 The application can run in two different modes, controlled by the `app.datasource.mode` property.
 
-- **Test Mode (`test`)**: (Default) The application generates simulated metric data for all configured DataSources. This is ideal for demonstrations, local development, and exploring the UI without needing real external connections. In this mode, the database is automatically reloaded with sample data on startup if it's found to be incomplete.
+- **Test Mode (`test`)**: (Default) The application generates simulated metric data for all configured DataSources. This is ideal for demonstrations, local development, and exploring the UI without needing real external connections. In this mode, sample data is seeded on startup only if the database is empty. Existing data is never deleted; set `app.seed=true` to add missing demo records (see [Startup Verification](#startup-verification)).
 - **Live Mode (`live`)**: The application attempts to connect to real external endpoints defined in your DataSources to fetch metrics. In this mode, the database initializer only creates the `admin` user, and only if it does not already exist. It does not create `testuser` and does not reload test data, preserving your existing configuration. See [Authentication and User Management](#authentication-and-user-management) for how the admin password is set.
 
 Test mode seeds the demo accounts `admin/admin` and `testuser/testuser` and logs a WARN that they are active. Do not expose a test-mode instance.
@@ -350,12 +350,16 @@ MeloSlo allows you to generate professional PDF reports for your Services and SL
 
 ## Startup Verification
 
-Upon startup, MeloSlo automatically verifies the state of the database. It checks for:
-- **Required Records**: Ensures that essential sample records (Services, DataSources, SLIs, and SLOs) are present.
-- **Metric Data**: Confirms that each test SLI has at least 30 days of performance data.
-- **Record Connections**: Verifies that all SLOs are correctly linked to a Service and their respective SLIs.
+In test mode, the startup check seeds the demo data only when the database is empty (no OpenSLO records and no users). A database that already contains data is never deleted, reloaded or changed by the check: records you created, renamed or deleted, and users you added, survive every restart.
 
-If any of these conditions are not met, the application will automatically reload the test data from scratch to ensure a consistent environment for demonstration and testing.
+To add the missing demo records to a non-empty database, start the application with `app.seed=true` (property, default `false`, test mode only). This mode:
+- Adds only demo records and demo users that are missing, looked up by name or username. Existing records keep their data, and existing passwords are not changed.
+- Generates 30 days of metric data only for demo SLIs that are created in that run.
+- Never deletes anything.
+
+If the emptiness check fails with a database error, the check logs an error and seeds nothing.
+
+In live mode, `app.seed` is ignored and a WARN is logged. Live mode never seeds demo data.
 
 ### Metric Records
 
