@@ -31,7 +31,35 @@ public class User {
     @Column
     private String departments;
 
+    @Enumerated(EnumType.STRING)
+    @Column(length = 16)
+    private Role role = Role.USER;
+
+    @Column(name = "password_change_required")
+    private Boolean passwordChangeRequired = false;
+
     public User() {}
+
+    public User(String username, String password, String email, String departments, Role role) {
+        this(username, password, email, departments);
+        this.role = role;
+    }
+
+    public Role getRole() {
+        return role;
+    }
+
+    public void setRole(Role role) {
+        this.role = role;
+    }
+
+    public boolean isPasswordChangeRequired() {
+        return Boolean.TRUE.equals(passwordChangeRequired);
+    }
+
+    public void setPasswordChangeRequired(boolean passwordChangeRequired) {
+        this.passwordChangeRequired = passwordChangeRequired;
+    }
 
     public User(String username, String password, String email, String departments) {
         this.username = username;

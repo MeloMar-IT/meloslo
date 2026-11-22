@@ -274,7 +274,8 @@ class ReportServiceTest {
 
     private byte[] generate(OpenSlo slo, int days) {
         when(openSloService.getRecordById(slo.getId())).thenReturn(Optional.of(slo));
-        when(openSloService.parseTargetFromSpec(anyString())).thenReturn(0.95);
+        // Targets are on the same 0-100 scale as the samples (#38)
+        when(openSloService.parseTargetFromSpec(anyString())).thenReturn(95.0);
         ReportOptionsDTO options = new ReportOptionsDTO();
         options.setIds(List.of(slo.getId()));
         options.setTimeValue(days);

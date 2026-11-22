@@ -53,10 +53,10 @@ The application features a sidebar with the following views:
 
 MeloSlo includes a secure login system and administrative tools to manage users and access control.
 
-- **Default Administrator**: Username: `admin` (Full Access)
+- **Default Administrator**: Username: `admin` (Role `ADMIN`, full access)
   - **Test mode (`test`)**: Password `admin`. This is a demo account and must not be exposed.
   - **Live mode (`live`)**: No fixed password. The password is taken from `APP_ADMIN_INITIAL_PASSWORD` (property `app.admin.initial-password`). If that is not set, a random 24-character password is generated and logged once at WARN level on first startup. Copy it from the log and change it after the first login.
-- **Test User**: Username: `testuser`, Password: `testuser` (Restricted to 'Finance' and 'Engineering' departments). Only seeded in test mode. Live mode never creates this account.
+- **Test User**: Username: `testuser`, Password: `testuser` (Role `USER`, restricted to 'Finance' and 'Engineering' departments). Only seeded in test mode. Live mode never creates this account.
 
 ### H2 Console
 
@@ -70,6 +70,12 @@ The H2 database console (`/h2-console`) is **off by default**.
 
 Table inspection remains available to administrators (see [Database Tables](#database-tables-apiv1database-administrator-only) in the API Reference). The free-form SQL query console (`POST /api/v1/database/query`) has been removed, so H2 file and alias functions such as `FILE_READ`, `CSVWRITE` and `CREATE ALIAS` can no longer be run through the application.
 
+Each user has a stored **role**, either `ADMIN` or `USER` (default). Only the role decides administrator rights; the username has no effect. Only administrators can list, create, update, or delete users. Any logged-in user can view their own profile and change their own password.
+
+- **Forced password change**: A user with the password-change flag can only change their password (`PUT /api/v1/users/me/password`) until they do so. The web UI shows this step and logs the user out afterwards.
+- **Session revocation**: Changing a user's role, password, or username, or deleting the user, ends that user's open sessions. The user must log in again. An administrator who edits their own account keeps their session unless the role or username changes.
+- **Last administrator**: The last remaining `ADMIN` cannot be demoted or deleted (409 Conflict).
+
 ### Application Modes: Test vs Live
 
 The application can run in two different modes, controlled by the `app.datasource.mode` property.
@@ -78,6 +84,8 @@ The application can run in two different modes, controlled by the `app.datasourc
 - **Live Mode (`live`)**: The application attempts to connect to real external endpoints defined in your DataSources to fetch metrics. In this mode, the database initializer only creates the `admin` user, and only if it does not already exist. It does not create `testuser` and does not reload test data, preserving your existing configuration. See [Authentication and User Management](#authentication-and-user-management) for how the admin password is set.
 
 Test mode seeds the demo accounts `admin/admin` and `testuser/testuser` and logs a WARN that they are active. Do not expose a test-mode instance.
+
+On startup, a user without a role is migrated: `admin` becomes `ADMIN` and all other users become `USER`. In live mode the migrated `admin` must change its password at its first login.
 
 To switch modes, update `src/main/resources/application.properties`:
 ```properties
@@ -123,6 +131,7 @@ java -jar target/meloslo-0.0.1-SNAPSHOT.jar --spring.config.additional-location=
 
 #### Access Control
 - **Full Access**: Administrators (`ADMIN` role) see and change all records in the system, including records without a department.
+- **Who Can Change Departments**: Only administrators can change a user's departments or role. A user cannot grant themselves access.
 - **Departmental Restriction**: Users can be assigned to one or more departments (separated by commas). These users only see, create, update and delete records whose department is one of their own, across all views (Dashboard, Services, Reports, etc.) and across the REST API.
 - **Multiple Departments**: A user can be granted access to multiple departments by listing them in their profile (e.g., `Finance,Engineering`). This allows them to monitor and manage records for all assigned departments simultaneously.
 - **Deny by Default**: A non-admin user with no departments assigned sees no records. Records without a department are visible to administrators only.
@@ -448,6 +457,26 @@ Manage raw performance data.
   - **Request Body**: `SliMetric` object linking to an SLI and DataSource.
   - **Response**: The created metric (201 Created). Returns `400 Bad Request` if the value is missing, not a number, or outside 0 to 100.
 
+### User Management (`/api/v1/users`)
+
+Access rules: all `/api/v1/users/**` endpoints require the **ADMIN** role, except `/me` and `/me/password`, which any logged-in user may call. Requests from a `USER` for another account return 403. Unknown ids return 404. Request bodies are validated and invalid input returns 400.
+
+- **`GET /api/v1/users/me`**: Retrieve the currently logged-in user (the password is never returned).
+  - **Response**: User object, or 401 when not logged in.
+- **`PUT /api/v1/users/me/password`**: Change your own password. Your role and departments are not changed.
+  - **Request Body**: `{"currentPassword": "...", "newPassword": "..."}`.
+  - **Constraint**: The new password must be 8–128 characters and differ from the current one.
+  - **Response**: 204 No Content, or 400 for a wrong current password or a rejected new password.
+- **`GET /api/v1/users`**: List all users (ADMIN).
+- **`POST /api/v1/users`**: Create a user (ADMIN).
+  - **Request Body**: `{"username": "...", "password": "...", "email": "...", "departments": "Finance,Engineering", "role": "USER"}`. `username`, `password` (8–128 characters), and `email` are required. `departments` (max 255 characters) and `role` are optional; `role` defaults to `USER`.
+  - **Response**: The created user, or 409 if the username already exists.
+- **`PUT /api/v1/users/{id}`**: Update a user (ADMIN).
+  - **Request Body**: `{"username": "...", "email": "...", "departments": "...", "role": "ADMIN", "password": "..."}`. `username` and `email` are required. Omitting `role` keeps the current role. A blank or omitted `password` keeps the current password.
+  - **Response**: The updated user. 404 for an unknown id, 409 for a duplicate username or when demoting the last administrator.
+- **`DELETE /api/v1/users/{id}`**: Delete a user (ADMIN).
+  - **Response**: 200 OK. 404 for an unknown id, 409 when deleting the last administrator.
+
 ### Database Tables (`/api/v1/database`) (Administrator Only)
 
 Tools for database inspection. Access is restricted to users with the **ADMIN** role.
@@ -498,6 +527,8 @@ Manages application users and their access control permissions (Role-Based and D
 - **`email`**: (String) User email address.
 - **`departments`**: (String) CSV list of assigned departments (e.g. `Finance,Engineering`).
 - **`password`**: (String) BCrypt encoded user password.
+- **`role`**: (String) `ADMIN` or `USER`. Defaults to `USER`. Authorities are derived from this column only.
+- **`password_change_required`**: (Boolean) When true, the user can only change their password until they do so.
 
 ### `slo_slis`
 A join table representing the many-to-many relationship between SLOs and SLIs (Objectives and Indicators).
