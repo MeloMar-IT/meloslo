@@ -18,6 +18,7 @@ Controller unit tests use `@WebMvcTest` and `MockMvc` to verify REST API endpoin
 Service unit tests verify the business logic, calculations, and interactions with repositories using Mockito.
 - `OpenSloServiceTest`: Validates logic for filtering records by department, parsing OpenSLO specifications, and managing records.
 - `SloCalculationTest`: Focuses on error budget calculations and status determination (Healthy, Warning, Breaching).
+- `SloMathTest`: Covers the shared rules used by the dashboard and the PDF report: averages that skip missing samples, error budget, status including "No data", and per-bucket averages with gaps.
 - `ReportServiceTest`: Tests the generation of PDF reports and data aggregation for reports.
 - `AlertingServiceTest`: Verifies the webhook alerting logic, payload variable replacement, and anti-spam protection.
 - `MetricFetchSchedulerTest`: Tests the background scheduling of metric collection from DataSources.

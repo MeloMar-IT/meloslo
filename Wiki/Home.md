@@ -52,6 +52,7 @@ The system is built around four primary entities:
 | **🟢 Healthy** | Performance is within the target, and the error budget is largely intact. |
 | **🟡 Warning** | The error budget is being consumed at a rate that could lead to a breach. |
 | **🔴 Breaching** | The current performance has fallen below the target, or the error budget is exhausted. |
+| **⚪ No data** | The rolling window has no samples. The value and error budget are empty; they are never shown as 0% or 100%. |
 
 ---
 
@@ -154,8 +155,10 @@ Stores all OpenSLO-related entities (Services, SLIs, SLOs, Sources).
 | `DISPLAY_NAME` | `VARCHAR` | Human-readable label. |
 | `SPEC` | `VARCHAR` | YAML/JSON specification details. |
 | `DEPARTMENT` | `VARCHAR` | Assigned department for access control. |
-| `STATUS` | `VARCHAR` | Current health status (Healthy, Warning, Breaching). |
+| `STATUS` | `VARCHAR` | Current health status (Healthy, Warning, Breaching, No data). |
 | `ERROR_BUDGET` | `DOUBLE` | Remaining error budget percentage. |
+| `LAST_FETCH_FAILURE_TIME` | `TIMESTAMP` | Time of the last failed metric fetch for this SLI (nullable). |
+| `LAST_FETCH_ERROR` | `VARCHAR(500)` | Error message of the last failed metric fetch for this SLI (nullable). |
 
 ### 2. `SLI_METRIC` (Performance Data)
 Stores historical metric data points collected for SLIs.
@@ -203,7 +206,10 @@ The `MetricFetchScheduler` component runs every **15 minutes** and performs the 
     -   It identifies all **SLIs** linked to that specific DataSource.
     -   It "fetches" the current value for each SLI (currently using a simulation that generates values between 0.9 and 1.0, representing high reliability).
     -   In a production environment, this would involve executing queries against the external system's API (e.g., a PromQL query for Prometheus).
+    -   The simulated fetch fails randomly with a probability set by `app.datasource.simulated-failure-rate` (default `0.03`). Set it to `0` to turn failures off.
 4.  **Persistence**: The fetched values are normalized (0-100) and stored in the `SLI_METRIC` table with a current timestamp.
+    -   If a fetch fails, **no sample is stored**. The failure time and error message are recorded on the SLI (`last_fetch_failure_time` and `last_fetch_error`) and the error is logged. A failed fetch is never stored as `0.0`.
+    -   An SLI that stops reporting shows **No data** once its samples leave the rolling window; it does not stay Healthy.
 5.  **Immediate Evaluation**: After metrics are saved, the system immediately checks all **SLOs** linked to those SLIs for potential breaches and triggers alerts if necessary.
 
 ### Linking SLIs to DataSources

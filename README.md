@@ -34,7 +34,7 @@ OpenSLO is an open-source specification for defining Service Level Objectives (S
 ### Navigation
 
 The application features a sidebar with the following views:
-- **Dashboard**: Overview of your services and SLOs, including healthy, warning, and breaching status.
+- **Dashboard**: Overview of your services and SLOs, including healthy, warning, breaching, and "No data" status.
 - **Services**: Manage your service records and associated SLOs.
 - **SLOs**: Manage your service level objectives and view detailed error budget charts.
 - **SLIs**: Manage your service level indicators.
@@ -43,7 +43,7 @@ The application features a sidebar with the following views:
 - **Documentation**: Access this documentation directly in the app. For a comprehensive walkthrough of features, see the [MeloSlo User Guide](./Docs/USER_GUIDE.md).
 - **Database Tables**: Browse the internal database tables and their structure (Administrator only), via `api/v1/database/tables`. The free-form SQL query console has been removed; see [Removed: SQL Query Console](#removed-sql-query-console).
 - **User Admin**: Manage user accounts and permissions (Administrator only).
-- **Reports**: Generate annual performance reports for Services and SLOs in PDF format, including performance graphs for the last year. Reports are compliance-aware and automatically handle data gaps by visualizing them as zero-performance periods.
+- **Reports**: Generate annual performance reports for Services and SLOs in PDF format, including performance graphs for the last year. Reports are compliance-aware and show data gaps as "No data" rather than as zero or healthy performance; the PDF and the dashboard use the same calculation rules.
 - **Trend Analysis**: Predictive modeling for SLOs to forecast error budget depletion using linear regression and weekly seasonality.
 - **Thread Management**: Automated background processing for metric collection and alerting using a managed `TaskManagementService`. It includes a watchdog mechanism to automatically terminate long-running or stalled threads (max 5 minutes) to ensure system stability.
 - **Logout**: Securely end your current session.
@@ -174,7 +174,9 @@ MeloSlo includes an automated scheduler that periodically "fetches" metrics from
 - **Automated Collection**: The background scheduler checks each DataSource and, if the refresh interval has passed, it creates new `SliMetric` records for all SLIs linked to that DataSource.
 - **Thread Management**: To ensure the main application remains responsive, all metric fetching and alerting tasks are executed asynchronously in separate threads managed by the `TaskManagementService`.
 - **Task Watchdog**: To prevent resource exhaustion, the system includes a watchdog that automatically identifies and cancels any background task that has been running for more than 5 minutes.
-- **Error Handling**: If a metric cannot be retrieved (simulated in this version), the value is automatically set to `0.0` to reflect a failure in the indicator.
+- **Error Handling**: If a metric cannot be retrieved, no `SliMetric` sample is stored. The failure is recorded on the SLI instead, in its `lastFetchFailureTime` and `lastFetchError` fields, and the error is logged. A failed fetch therefore never appears as a `0.0` value and never triggers a false breach.
+- **Simulated Failures**: In the simulated fetch (used in `test` mode), a fetch fails randomly with a probability set by `app.datasource.simulated-failure-rate` (default `0.03`, i.e. 3%). Set it to `0` to disable simulated failures.
+- **Missing Data**: An SLI or SLO with no samples in the rolling window has no value. It shows as **No data**, not as 100% healthy. See [SLO Status and Error Budget](#slo-status-and-error-budget).
 - **Last Sync**: The application tracks and displays the last time each DataSource was successfully refreshed.
 
 ## Alerting and Webhooks
@@ -344,8 +346,8 @@ MeloSlo allows you to generate professional PDF reports for your Services and SL
   - Average performance (SLO value) over the last year.
   - Defined target for the SLO.
   - Remaining error budget for the year.
-  - Current health status (Healthy, Warning, Breaching) based on the annual performance.
-  - Performance graphs with area filling (0 to value) and compliance highlighting (Green/Red).
+  - Current health status (Healthy, Warning, Breaching, or No data) based on the annual performance.
+  - Performance graphs with area filling (0 to value) and compliance highlighting (Green/Red). Periods without samples are left as gaps in the graph; if a report has no samples at all, its chart is replaced by the note "No data in this period." and its Average, Error Budget and Status cells show "No data".
 - **Service Aggregation**: If a Service is selected, the report automatically includes all SLOs associated with that service.
 
 ## Startup Verification
@@ -377,10 +379,12 @@ When viewing the details of an SLO, the application automatically calculates its
   - **Healthy** (Green): Error Budget >= 25%
   - **Warning** (Yellow): Error Budget 0% to 25%
   - **Breaching** (Red): Error Budget < 0%
+  - **No data** (Grey): The rolling window has no samples. Value and error budget are empty (`null`); they are never replaced by 0% or 100%.
 - **Rolling Window**: By default, calculations are performed over a 30-day rolling window (customizable via `timeWindow` in the SLO specification).
 - **Target**: The target percentage is extracted from the `objectives` section of the SLO specification.
-- **Current SLO**: Calculated as the average of all linked SLI metric values within the rolling window.
-- **Error Budget**: Calculated as the remaining percentage of allowed unreliability.
+- **Current SLO**: Calculated as the average of all linked SLI metric values within the rolling window. If there are no values, the current SLO is empty (`null`).
+- **Error Budget**: Calculated as the remaining percentage of allowed unreliability. It is empty when there is no current SLO.
+- **Business Services**: A service's value averages only the SLOs that have data. If none of them have data, the service is **No data**.
 
 #### SLO Specification Example with Calculation Parameters
 
@@ -410,7 +414,7 @@ Manage Services, SLIs, SLOs, and DataSources.
   - **Query Parameters**: `kind` (optional) - Filter records by type (`Service`, `SLI`, `SLO`, `DataSource`).
   - **Response**: List of OpenSlo objects.
 - **`GET /api/v1/openslo/dashboard-stats`**: Retrieve aggregated statistics for the dashboard.
-  - **Response**: `DashboardStats` object (Total Services, SLOs, Healthy, Warning, Breaching).
+  - **Response**: `DashboardStats` object (Total Services, SLOs, Healthy, Warning, Breaching, No data).
 - **`GET /api/v1/openslo/{id}`**: Retrieve a specific record by its database ID.
   - **Response**: A single OpenSlo object or 404. A record in another department returns 404.
 - **`POST /api/v1/openslo`**: Create a new OpenSLO record.
@@ -422,7 +426,7 @@ Manage Services, SLIs, SLOs, and DataSources.
 - **`DELETE /api/v1/openslo/{id}`**: Delete a record and its associations.
   - **Response**: 204 No Content. 404 if the record does not exist or is in another department. 403 when deleting an AlertingSource that is used by an SLO in another department.
 - **`GET /api/v1/openslo/{id}/report`**: (SLO records only) Retrieve a comprehensive status report.
-  - **Response**: `SloReport` containing current value, target, status (Healthy/Warning/Breaching), and error budget. Only SLIs visible to the caller contribute; 404 for records in another department.
+  - **Response**: `SloReport` containing current value, target, status (Healthy/Warning/Breaching/No data), and error budget. When there is no data, `currentValue` and `errorBudget` are `null`. Only SLIs visible to the caller contribute; 404 for records in another department.
 - **`GET /api/v1/openslo/{id}/service-report`**: (Service records only) Retrieve a report for all SLOs in a service.
   - **Response**: `ServiceReport` aggregating data from all child SLOs the caller can see. 404 for records in another department.
 - **`GET /api/v1/openslo/{id}/sli-report`**: (SLI records only) Retrieve a detailed performance report for an SLI.
@@ -464,6 +468,8 @@ Stores all core OpenSLO entities.
 - **`manager`**: (String) Manager metadata.
 - **`refresh_rate`**: (Integer) Data collection interval for DataSources.
 - **`last_refresh_time`**: (DateTime) Last time this DataSource was synced.
+- **`last_fetch_failure_time`**: (DateTime, nullable) Time of the last failed metric fetch for this SLI. Set only on failure.
+- **`last_fetch_error`**: (String, nullable, max 500 chars) Error message of the last failed metric fetch for this SLI.
 - **`alert_url`**: (String) The webhook URL for AlertingSources.
 - **`alert_payload`**: (Text) The JSON payload template for AlertingSources.
 - **`last_alert_time`**: (DateTime) Last time this SLO triggered an alert.

@@ -16,9 +16,14 @@
 - `POST /api/v1/openslo` with an `id` in the body returns 400.
 - `DELETE /api/v1/openslo/{id}` for an unknown id returns 404 instead of 204.
 - Test mode seeds demo data only into an empty database. A restart no longer deletes or reloads existing data. New property `app.seed` (default `false`) adds only missing demo records and never deletes anything (#40).
+- Missing data is shown as "No data" everywhere (dashboard, API, UI and PDF). An SLI or SLO with no samples no longer counts as 100% healthy, and days without data are no longer shown as 100% in charts.
+- The PDF report uses the same average, error budget and status rules as the dashboard. Gaps in the PDF are left empty instead of being filled with 0%.
+- `DashboardStats` includes a `noDataSlos` count.
+- The simulated failure rate is configurable with `app.datasource.simulated-failure-rate` (default `0.03`).
 
 ### Fixed
 - Restarting in test mode no longer wipes all records and users when a demo record was renamed or deleted, the `testuser` account was removed, or an SLI has fewer than 30 metrics, including SLIs created by users (#40).
+- A failed metric fetch no longer stores a `0.0` sample, which could breach an SLO and fire a false alert. The failure is recorded on the SLI in `last_fetch_failure_time` and `last_fetch_error` instead.
 
 ## [0.1.0] - 2026-04-05
 ### Added
