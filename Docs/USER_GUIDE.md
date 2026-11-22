@@ -65,6 +65,7 @@ The Dashboard shows:
 - **Total Business Services**: The count of all logical collections of SLOs.
 - **Total SLOs**: The total number of objectives being tracked.
 - **Healthy/Warning/Breaching**: Real-time status indicators based on error budget consumption.
+- **No data**: Shown when an SLO has no samples in its rolling window. It is not counted as healthy, and no value is shown for it. A failed metric fetch leaves no sample behind, so it also appears as a gap rather than a 0% value.
 
 ---
 

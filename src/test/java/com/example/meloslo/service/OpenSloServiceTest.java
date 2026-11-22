@@ -19,6 +19,8 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContext;
 import org.springframework.security.core.context.SecurityContextHolder;
 
+import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
@@ -329,6 +331,155 @@ public class OpenSloServiceTest {
         assertThat(result.getCurrentValue()).isCloseTo(0.98, within(0.001));
         assertThat(result.getStatus()).isEqualTo("Healthy");
         assertThat(result.getErrorBudget()).isNotNull();
+    }
+
+    private static final String SPEC_95 = "spec:\n  objectives:\n    - target: 0.95\n  timeWindow:\n    - duration: 30d";
+
+    private OpenSlo sloWithSli(String name) {
+        OpenSlo sli = new OpenSlo("openslo/v1", "SLI", name + "-sli", name + " SLI", "{}");
+        OpenSlo s = new OpenSlo("openslo/v1", "SLO", name, name, SPEC_95);
+        s.setSlis(Arrays.asList(sli));
+        return s;
+    }
+
+    @Test
+    void sloWithoutSamplesReportsNoData() {
+        OpenSlo s = sloWithSli("Empty");
+        when(metricRepository.findBySliAndTimestampAfterOrderByTimestampDesc(any(), any())).thenReturn(List.of());
+
+        var report = service.calculateSloReport(s);
+
+        assertThat(report.getStatus()).isEqualTo("No data");
+        assertThat(report.getCurrentValue()).isNull();
+        assertThat(report.getErrorBudget()).isNull();
+    }
+
+    @Test
+    void dashboardStatsCountNoDataSeparately() {
+        OpenSlo s = sloWithSli("Empty");
+        when(repository.findByKind("BusinessService")).thenReturn(List.of());
+        when(repository.findByKind("SLO")).thenReturn(List.of(s));
+        when(metricRepository.findBySliAndTimestampAfterOrderByTimestampDesc(any(), any())).thenReturn(List.of());
+
+        DashboardStats stats = service.getDashboardStats();
+
+        assertThat(stats.getNoDataSlos()).isEqualTo(1);
+        assertThat(stats.getBreachingSlos()).isEqualTo(0);
+        assertThat(stats.getHealthySlos()).isEqualTo(0);
+        assertThat(stats.getWarningSlos()).isEqualTo(0);
+    }
+
+    @Test
+    void getAllRecordsGivesNoDataForSloWithoutSlisAndWithoutMetrics() {
+        SecurityContextHolder.clearContext();
+        OpenSlo noSlis = new OpenSlo("openslo/v1", "SLO", "NoSlis", "No SLIs", SPEC_95);
+        OpenSlo noMetrics = sloWithSli("NoMetrics");
+        when(repository.findAll()).thenReturn(Arrays.asList(noSlis, noMetrics));
+
+        List<OpenSlo> results = service.getAllRecords();
+
+        for (OpenSlo r : results) {
+            assertThat(r.getStatus()).isEqualTo("No data");
+            assertThat(r.getCurrentValue()).isNull();
+            assertThat(r.getErrorBudget()).isNull();
+        }
+    }
+
+    @Test
+    void businessServiceWithoutDataOrSlosIsNoData() {
+        SecurityContextHolder.clearContext();
+        OpenSlo withEmptySlo = new OpenSlo("openslo/v1", "BusinessService", "Svc1", "Svc1", "{}");
+        withEmptySlo.setSlos(Arrays.asList(sloWithSli("Empty")));
+        OpenSlo withoutSlos = new OpenSlo("openslo/v1", "BusinessService", "Svc2", "Svc2", "{}");
+        when(repository.findAll()).thenReturn(Arrays.asList(withEmptySlo, withoutSlos));
+
+        List<OpenSlo> results = service.getAllRecords();
+
+        for (OpenSlo r : results) {
+            assertThat(r.getStatus()).isEqualTo("No data");
+            assertThat(r.getCurrentValue()).isNull();
+            assertThat(r.getErrorBudget()).isNull();
+        }
+    }
+
+    @Test
+    void businessServiceUsesOnlySlosWithData() {
+        SecurityContextHolder.clearContext();
+        OpenSlo withData = sloWithSli("WithData");
+        OpenSlo withoutData = sloWithSli("WithoutData");
+        OpenSlo svc = new OpenSlo("openslo/v1", "BusinessService", "Svc", "Svc", "{}");
+        svc.setSlos(Arrays.asList(withData, withoutData));
+        when(repository.findAll()).thenReturn(Arrays.asList(svc));
+        when(metricRepository.findBySliAndTimestampAfterOrderByTimestampDesc(eq(withData.getSlis().get(0)), any()))
+                .thenReturn(Arrays.asList(new SliMetric(null, 0.98, null, null)));
+        when(metricRepository.findBySliAndTimestampAfterOrderByTimestampDesc(eq(withoutData.getSlis().get(0)), any()))
+                .thenReturn(List.of());
+
+        OpenSlo result = service.getAllRecords().get(0);
+
+        assertThat(result.getCurrentValue()).isCloseTo(0.98, within(0.001));
+        assertThat(result.getStatus()).isEqualTo("Healthy");
+    }
+
+    @Test
+    void historicalValuesAreNullForDaysWithoutSamples() {
+        OpenSlo s = sloWithSli("Sparse");
+        when(metricRepository.findBySliAndTimestampAfterOrderByTimestampDesc(any(), any()))
+                .thenReturn(Arrays.asList(new SliMetric(java.time.LocalDateTime.now().minusDays(1), 0.98, null, null)));
+
+        List<Double> history = service.calculateSloReport(s).getHistoricalSloValues();
+
+        assertThat(history).hasSize(30);
+        assertThat(history.get(28)).isCloseTo(98.0, within(0.001));
+        assertThat(history.stream().filter(java.util.Objects::isNull).count()).isEqualTo(29);
+    }
+
+    @Test
+    void historicalValuesUseAllSamplesAcrossSlisNotTheCappedList() {
+        OpenSlo sliA = new OpenSlo("openslo/v1", "SLI", "A", "A", "{}");
+        OpenSlo sliB = new OpenSlo("openslo/v1", "SLI", "B", "B", "{}");
+        OpenSlo s = new OpenSlo("openslo/v1", "SLO", "Multi", "Multi", SPEC_95);
+        s.setSlis(Arrays.asList(sliA, sliB));
+        LocalDateTime yesterday = LocalDateTime.now().minusDays(1);
+
+        // 50 samples of 0.5 on SLI A come first, then 10 samples of 1.0 on SLI B.
+        // The first 50 entries alone average 0.5; all 60 average 0.5833.
+        List<SliMetric> a = new ArrayList<>();
+        for (int i = 0; i < 50; i++) a.add(new SliMetric(yesterday.withSecond(i), 0.5, sliA, null));
+        List<SliMetric> b = new ArrayList<>();
+        for (int i = 0; i < 10; i++) b.add(new SliMetric(yesterday.withSecond(i), 1.0, sliB, null));
+        when(metricRepository.findBySliAndTimestampAfterOrderByTimestampDesc(eq(sliA), any())).thenReturn(a);
+        when(metricRepository.findBySliAndTimestampAfterOrderByTimestampDesc(eq(sliB), any())).thenReturn(b);
+
+        var report = service.calculateSloReport(s);
+
+        assertThat(report.getRecentMetrics()).hasSize(50); // the display list is capped
+        assertThat(report.getHistoricalSloValues().get(28)).isCloseTo((50 * 0.5 + 10 * 1.0) / 60 * 100, within(0.001));
+    }
+
+    @Test
+    void historicalValuesKeepTrailingNullsWhenLatestSampleIsOld() {
+        OpenSlo s = sloWithSli("Stale");
+        when(metricRepository.findBySliAndTimestampAfterOrderByTimestampDesc(any(), any()))
+                .thenReturn(Arrays.asList(new SliMetric(LocalDateTime.now().minusDays(5), 0.98, null, null)));
+
+        List<Double> history = service.calculateSloReport(s).getHistoricalSloValues();
+
+        assertThat(history).hasSize(30);
+        assertThat(history.get(24)).isCloseTo(98.0, within(0.001)); // 5 days ago
+        for (int i = 25; i < 30; i++) {
+            assertThat(history.get(i)).isNull(); // the last 5 days, up to today, stay gaps
+        }
+    }
+
+    @Test
+    void sliReportWithoutMetricsHasNullCurrentValue() {
+        OpenSlo sli = new OpenSlo("openslo/v1", "SLI", "EmptySLI", "Empty SLI", "{}");
+        sli.setId(9L);
+        when(repository.findById(9L)).thenReturn(Optional.of(sli));
+        when(metricRepository.findBySliOrderByTimestampDesc(sli)).thenReturn(List.of());
+
+        assertThat(service.getSliReport(9L).getCurrentValue()).isNull();
     }
 
     @Test

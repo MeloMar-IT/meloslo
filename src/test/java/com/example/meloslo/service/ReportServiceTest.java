@@ -19,6 +19,7 @@ import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 class ReportServiceTest {
@@ -213,6 +214,94 @@ class ReportServiceTest {
         options.setIncludeErrorBudgetChart(true);
         byte[] pdfBothCharts = reportService.generatePdfReport(options);
         assertNotNull(pdfBothCharts);
+    }
+
+    private OpenSlo sloWithSli(long id) {
+        OpenSlo sli = new OpenSlo();
+        sli.setId(id + 100);
+        sli.setKind("SLI");
+        OpenSlo slo = new OpenSlo();
+        slo.setId(id);
+        slo.setKind("SLO");
+        slo.setDisplayName("Agreement SLO");
+        slo.setName("agreement-slo");
+        slo.setSpec("spec: {objectives: [{target: 0.95}], timeWindow: [{duration: 30d}]}");
+        slo.setSlis(Collections.singletonList(sli));
+        return slo;
+    }
+
+    private String pdfText(byte[] pdf) throws IOException {
+        PdfReader reader = new PdfReader(pdf);
+        try {
+            com.lowagie.text.pdf.parser.PdfTextExtractor extractor = new com.lowagie.text.pdf.parser.PdfTextExtractor(reader);
+            StringBuilder sb = new StringBuilder();
+            for (int i = 1; i <= reader.getNumberOfPages(); i++) {
+                sb.append(extractor.getTextFromPage(i));
+            }
+            // Numbers use the JVM default locale (e.g. "94,0000%"); normalise the decimal separator
+            return sb.toString().replaceAll("\\s+", "").replace(',', '.');
+        } finally {
+            reader.close();
+        }
+    }
+
+    private byte[] generate(OpenSlo slo, int days) {
+        when(openSloService.getRecordById(slo.getId())).thenReturn(Optional.of(slo));
+        when(openSloService.getCurrentUserDepartments()).thenReturn(Collections.emptyList());
+        when(openSloService.parseTargetFromSpec(anyString())).thenReturn(0.95);
+        ReportOptionsDTO options = new ReportOptionsDTO();
+        options.setIds(List.of(slo.getId()));
+        options.setTimeValue(days);
+        options.setTimeUnit("DAYS");
+        return reportService.generatePdfReport(options);
+    }
+
+    @Test
+    void pdfShowsNoDataInsteadOfZeroPercentWithoutSamples() throws IOException {
+        OpenSlo slo = sloWithSli(40L);
+        when(metricRepository.findBySliAndTimestampAfterOrderByTimestampDesc(any(), any())).thenReturn(new ArrayList<>());
+
+        String text = pdfText(generate(slo, 30));
+
+        assertTrue(text.contains("Nodata"), text);
+        assertTrue(text.contains("NODATA"), text);
+        assertTrue(text.contains("Nodatainthisperiod."), text);
+        assertFalse(text.contains("0.0000%"), text);
+    }
+
+    @Test
+    void pdfAndDashboardCalculationAgreeForTheSameSamples() throws IOException {
+        OpenSlo slo = sloWithSli(41L);
+        List<SliMetric> metrics = List.of(
+                new SliMetric(LocalDateTime.now().minusDays(1), 0.98, null, null),
+                new SliMetric(LocalDateTime.now().minusDays(2), 0.90, null, null));
+        when(metricRepository.findBySliAndTimestampAfterOrderByTimestampDesc(any(), any())).thenReturn(metrics);
+
+        String text = pdfText(generate(slo, 30));
+
+        // Real service backed by the same samples
+        OpenSloService real = new OpenSloService(mock(com.example.meloslo.repository.OpenSloRepository.class),
+                metricRepository, mock(com.example.meloslo.repository.UserRepository.class));
+        var report = real.calculateSloReport(slo);
+
+        assertEquals(0.94, report.getCurrentValue(), 1e-9);
+        assertEquals("Breaching", report.getStatus());
+        assertTrue(text.contains("94.0000%"), text);
+        assertTrue(text.contains("BREACHING"), text);
+    }
+
+    @Test
+    void pdfWithGapsBetweenSamplesStillRenders() throws IOException {
+        OpenSlo slo = sloWithSli(42L);
+        List<SliMetric> metrics = List.of(
+                new SliMetric(LocalDateTime.now().minusDays(1), 0.99, null, null),
+                new SliMetric(LocalDateTime.now().minusDays(5), 0.97, null, null));
+        when(metricRepository.findBySliAndTimestampAfterOrderByTimestampDesc(any(), any())).thenReturn(metrics);
+
+        String text = pdfText(generate(slo, 7));
+
+        assertTrue(text.contains("98.0000%"), text);
+        assertFalse(text.contains("Nodatainthisperiod."), text);
     }
 
     @Test
