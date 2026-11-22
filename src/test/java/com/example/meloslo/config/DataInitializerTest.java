@@ -1,6 +1,7 @@
 package com.example.meloslo.config;
 
 import com.example.meloslo.model.OpenSlo;
+import com.example.meloslo.model.Role;
 import com.example.meloslo.model.User;
 import com.example.meloslo.repository.MetricRepository;
 import com.example.meloslo.repository.OpenSloRepository;
@@ -13,8 +14,10 @@ import org.springframework.boot.CommandLineRunner;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.util.ReflectionTestUtils;
 
+import java.util.List;
 import java.util.Optional;
 
+import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
@@ -66,6 +69,71 @@ class DataInitializerTest {
         verify(metricRepository, never()).deleteAll();
         // and should not save OpenSlo records (test data)
         verify(openSloRepository, never()).save(any());
+    }
+
+    @Test
+    void liveSeedingOnEmptyTableCreatesAdminWithPasswordChangeRequired() throws Exception {
+        ReflectionTestUtils.setField(dataInitializer, "datasourceMode", "live");
+        when(userRepository.count()).thenReturn(0L);
+        when(passwordEncoder.encode(anyString())).thenReturn("encodedPassword");
+
+        dataInitializer.initDatabase(openSloRepository, metricRepository, userRepository, passwordEncoder).run();
+
+        verify(userRepository).save(argThat(u -> "admin".equals(u.getUsername())
+                && u.getRole() == Role.ADMIN && u.isPasswordChangeRequired()));
+        verify(userRepository).save(argThat(u -> "testuser".equals(u.getUsername()) && u.getRole() == Role.USER));
+    }
+
+    @Test
+    void liveStartWithExistingUsersButNoAdminSeedsNothing() throws Exception {
+        ReflectionTestUtils.setField(dataInitializer, "datasourceMode", "live");
+        User boss = new User("boss", "hash", "b@example.com", null, Role.ADMIN);
+        when(userRepository.findAll()).thenReturn(List.of(boss));
+        when(userRepository.count()).thenReturn(1L);
+
+        dataInitializer.initDatabase(openSloRepository, metricRepository, userRepository, passwordEncoder).run();
+
+        verify(userRepository, never()).save(any(User.class));
+    }
+
+    @Test
+    void backfillAssignsRolesAndFlagsAdminInLiveMode() throws Exception {
+        ReflectionTestUtils.setField(dataInitializer, "datasourceMode", "live");
+        User admin = new User("admin", "h", "a@example.com", null);
+        admin.setRole(null);
+        User bob = new User("bob", "h", "b@example.com", null);
+        bob.setRole(null);
+        User carol = new User("carol", "h", "c@example.com", null, Role.ADMIN);
+        when(userRepository.findAll()).thenReturn(List.of(admin, bob, carol));
+        when(userRepository.count()).thenReturn(3L);
+
+        dataInitializer.initDatabase(openSloRepository, metricRepository, userRepository, passwordEncoder).run();
+
+        assertEquals(Role.ADMIN, admin.getRole());
+        assertTrue(admin.isPasswordChangeRequired());
+        assertEquals(Role.USER, bob.getRole());
+        assertFalse(bob.isPasswordChangeRequired());
+        assertEquals(Role.ADMIN, carol.getRole());
+        verify(userRepository, never()).save(carol);
+    }
+
+    @Test
+    void backfillDoesNotFlagAdminInTestMode() throws Exception {
+        ReflectionTestUtils.setField(dataInitializer, "datasourceMode", "test");
+        User admin = new User("admin", "h", "a@example.com", null);
+        admin.setRole(null);
+        when(userRepository.findAll()).thenReturn(List.of(admin));
+        when(passwordEncoder.encode(anyString())).thenReturn("x");
+        when(openSloRepository.save(any(OpenSlo.class))).thenReturn(new OpenSlo());
+
+        try {
+            dataInitializer.initDatabase(openSloRepository, metricRepository, userRepository, passwordEncoder).run();
+        } catch (RuntimeException ignored) {
+            // the reload part is not under test here
+        }
+
+        assertEquals(Role.ADMIN, admin.getRole());
+        assertFalse(admin.isPasswordChangeRequired());
     }
 
     @Test

@@ -169,7 +169,7 @@
                         </div>
                         <div class="flex-1 min-w-0">
                             <p class="text-sm font-medium text-slate-900 truncate">{{ currentUser ? currentUser.username : 'User' }}</p>
-                            <p class="text-xs text-slate-500 truncate">{{ currentUser ? (currentUser.departments || 'Administrator') : '' }}</p>
+                            <p class="text-xs text-slate-500 truncate">{{ currentUser ? (currentUser.departments || (currentUser.role === 'ADMIN' ? 'Administrator' : 'All departments')) : '' }}</p>
                         </div>
                     </div>
                 </div>
@@ -1355,6 +1355,7 @@ spec:
                                         <tr class="bg-slate-50/50">
                                             <th class="px-6 py-4 text-[11px] font-bold text-slate-500 uppercase tracking-wider">Username</th>
                                             <th class="px-6 py-4 text-[11px] font-bold text-slate-500 uppercase tracking-wider">Email</th>
+                                            <th class="px-6 py-4 text-[11px] font-bold text-slate-500 uppercase tracking-wider">Role</th>
                                             <th class="px-6 py-4 text-[11px] font-bold text-slate-500 uppercase tracking-wider">Departments</th>
                                             <th class="px-6 py-4 text-[11px] font-bold text-slate-500 uppercase tracking-wider">Actions</th>
                                         </tr>
@@ -1363,6 +1364,7 @@ spec:
                                         <tr v-for="u in users" :key="u.id" class="hover:bg-slate-50 transition-colors">
                                             <td class="px-6 py-4 text-sm font-semibold text-slate-800">{{ u.username }}</td>
                                             <td class="px-6 py-4 text-sm text-slate-600">{{ u.email }}</td>
+                                            <td class="px-6 py-4 text-sm text-slate-600">{{ u.role || 'USER' }}</td>
                                             <td class="px-6 py-4">
                                                 <span v-if="u.departments" class="px-2 py-1 bg-blue-50 text-blue-700 text-[10px] font-bold rounded-lg uppercase border border-blue-100">{{ u.departments }}</span>
                                                 <span v-else class="px-2 py-1 bg-slate-100 text-slate-500 text-[10px] font-bold rounded-lg uppercase border border-slate-200">Full Access</span>
@@ -1689,6 +1691,26 @@ spec:
         </div>
 
         <!-- User Modal -->
+        <div v-if="isAuthenticated && currentUser && currentUser.passwordChangeRequired" class="fixed inset-0 z-[60] flex items-center justify-center p-4">
+            <div class="absolute inset-0 bg-slate-900 opacity-70"></div>
+            <div class="relative bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden">
+                <div class="p-6 border-b border-slate-200">
+                    <h3 class="text-xl font-bold text-slate-800">Change your password</h3>
+                    <p class="text-xs text-slate-500 mt-1">You must change your password before using the application. You will be logged out afterwards.</p>
+                </div>
+                <form @submit.prevent="changeOwnPassword">
+                    <div class="p-6 space-y-4">
+                        <input type="password" v-model="passwordForm.currentPassword" required placeholder="Current password" class="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm">
+                        <input type="password" v-model="passwordForm.newPassword" required minlength="8" maxlength="128" placeholder="New password (8-128 characters)" class="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm">
+                    </div>
+                    <div class="p-6 border-t border-slate-200 bg-slate-50 flex justify-end space-x-3">
+                        <button type="button" @click="handleLogout" class="px-4 py-2 text-slate-600 font-medium">Log out</button>
+                        <button type="submit" class="px-6 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700">Change password</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
         <div v-if="isUserModalOpen" class="fixed inset-0 z-50 flex items-center justify-center p-4">
             <div class="absolute inset-0 bg-slate-900 opacity-50" @click="closeUserModal"></div>
             <div class="relative bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden animate__animated animate__fadeInUp">
@@ -1713,8 +1735,15 @@ spec:
                             <input type="password" v-model="userForm.password" :required="!isUserEditing" class="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none text-sm" :placeholder="isUserEditing ? 'Leave blank to keep current' : ''">
                         </div>
                         <div>
+                            <label class="block text-sm font-bold text-slate-700 mb-1">Role</label>
+                            <select v-model="userForm.role" class="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none text-sm">
+                                <option value="USER">User</option>
+                                <option value="ADMIN">Administrator</option>
+                            </select>
+                        </div>
+                        <div>
                             <label class="block text-sm font-bold text-slate-700 mb-1">Departments (Restriction)</label>
-                            <p class="text-[10px] text-slate-500 mb-2">Leave blank for full access (Administrator). Separate multiple with commas.</p>
+                            <p class="text-[10px] text-slate-500 mb-2">Leave blank to see all departments. Separate multiple with commas.</p>
                             <input type="text" v-model="userForm.departments" placeholder="e.g. Finance, Engineering" class="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none text-sm">
                         </div>
                     </div>
@@ -1843,14 +1872,15 @@ spec:
                 const isAuthenticated = ref(false);
                 const isLoggingIn = ref(false);
                 const currentUser = ref(null);
-                const isAdmin = computed(() => currentUser.value && !currentUser.value.departments);
+                const isAdmin = computed(() => !!currentUser.value && currentUser.value.role === 'ADMIN' && !currentUser.value.passwordChangeRequired);
+                const passwordForm = ref({ currentPassword: '', newPassword: '' });
                 const loginForm = ref({ username: '', password: '' });
                 const loginError = ref('');
 
                 const users = ref([]);
                 const isUserModalOpen = ref(false);
                 const isUserEditing = ref(false);
-                const userForm = ref({ id: null, username: '', email: '', password: '', departments: '' });
+                const userForm = ref({ id: null, username: '', email: '', password: '', departments: '', role: 'USER' });
 
                 const dashboardStats = ref({ totalServices: 0, totalSlos: 0, healthySlos: 0, warningSlos: 0, breachingSlos: 0 });
                 const currentView = ref('dashboard');
@@ -2305,6 +2335,26 @@ spec:
                     }
                 };
 
+                const changeOwnPassword = async () => {
+                    try {
+                        const response = await fetch('/api/v1/users/me/password', {
+                            method: 'PUT',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(passwordForm.value),
+                            credentials: 'same-origin'
+                        });
+                        passwordForm.value = { currentPassword: '', newPassword: '' };
+                        if (response.ok) {
+                            await handleLogout();
+                            showNotification('success', 'Password changed. Please log in again.');
+                        } else {
+                            showNotification('error', 'Password not changed (check the current password and the 8-128 character length)');
+                        }
+                    } catch (e) {
+                        showNotification('error', 'An error occurred while changing the password');
+                    }
+                };
+
                 const fetchUsers = async () => {
                     try {
                         const response = await fetch('/api/v1/users', { credentials: 'same-origin' });
@@ -2318,7 +2368,7 @@ spec:
 
                 const openUserCreateModal = () => {
                     isUserEditing.value = false;
-                    userForm.value = { id: null, username: '', email: '', password: '', departments: '' };
+                    userForm.value = { id: null, username: '', email: '', password: '', departments: '', role: 'USER' };
                     isUserModalOpen.value = true;
                 };
 
@@ -2349,7 +2399,8 @@ spec:
                             closeUserModal();
                             showNotification('success', `User ${isUserEditing.value ? 'updated' : 'created'} successfully`);
                         } else {
-                            showNotification('error', 'Failed to save user');
+                            const msg = { 400: 'Invalid input', 403: 'Not allowed', 404: 'User not found', 409: 'Conflict (duplicate username or last administrator)' }[response.status];
+                            showNotification('error', 'Failed to save user' + (msg ? ': ' + msg : ''));
                         }
                     } catch (e) {
                         showNotification('error', 'An error occurred while saving user');
@@ -2885,6 +2936,8 @@ spec:
                 return {
                     isAuthenticated,
                     isAdmin,
+                    passwordForm,
+                    changeOwnPassword,
                     isLoggingIn,
                     currentUser,
                     loginForm,

@@ -1,6 +1,14 @@
 package com.example.meloslo.config;
 
+import com.example.meloslo.model.Role;
 import com.example.meloslo.repository.UserRepository;
+import java.util.List;
+import org.springframework.http.HttpMethod;
+import org.springframework.security.core.GrantedAuthority;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.core.session.SessionRegistry;
+import org.springframework.security.core.session.SessionRegistryImpl;
+import org.springframework.security.web.session.HttpSessionEventPublisher;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -50,10 +58,17 @@ public class SecurityConfig {
                 }
                 
                 authRequests
-                    .requestMatchers("/api/v1/users/me").permitAll()
+                    .requestMatchers(HttpMethod.GET, "/api/v1/users/me").permitAll()
+                    .requestMatchers(HttpMethod.PUT, "/api/v1/users/me/password").authenticated()
+                    .requestMatchers("/api/v1/users", "/api/v1/users/**").hasRole("ADMIN")
                     .requestMatchers("/api/v1/database/**", "/api/v1/metrics/**").hasRole("ADMIN")
-                    .anyRequest().authenticated();
+                    .anyRequest().hasAnyRole("ADMIN", "USER");
             })
+            .sessionManagement(session -> session
+                .sessionConcurrency(c -> c
+                    .maximumSessions(-1)
+                    .sessionRegistry(sessionRegistry())
+                    .expiredSessionStrategy(event -> event.getResponse().sendError(401, "Session expired"))))
             .httpBasic(withDefaults())
             .formLogin(form -> form
                 .loginPage("/") // Redirect to root if not authenticated
@@ -98,7 +113,7 @@ public class SecurityConfig {
                     return User.builder()
                         .username(u.getUsername())
                         .password(u.getPassword())
-                        .roles("admin".equals(u.getUsername()) ? "ADMIN" : "USER")
+                        .authorities(authoritiesFor(u))
                         .build();
                 })
                 .orElseGet(() -> {
@@ -106,6 +121,25 @@ public class SecurityConfig {
                     throw new UsernameNotFoundException("User not found: " + username);
                 });
         };
+    }
+
+    private static List<GrantedAuthority> authoritiesFor(com.example.meloslo.model.User u) {
+        if (u.isPasswordChangeRequired()) {
+            return List.of(new SimpleGrantedAuthority("PASSWORD_CHANGE_REQUIRED"));
+        }
+        // Authorities come from the stored role only, never from the username. Missing role = USER.
+        String role = u.getRole() == Role.ADMIN ? "ROLE_ADMIN" : "ROLE_USER";
+        return List.of(new SimpleGrantedAuthority(role));
+    }
+
+    @Bean
+    public SessionRegistry sessionRegistry() {
+        return new SessionRegistryImpl();
+    }
+
+    @Bean
+    public HttpSessionEventPublisher httpSessionEventPublisher() {
+        return new HttpSessionEventPublisher();
     }
 
     @Bean

@@ -75,15 +75,15 @@ The application features a sidebar providing access to:
 
 ### Access Control & Departments
 
-- **Administrator**: Full system access.
-- **Standard User**: Access limited to assigned departments. Users only see records matching their department (e.g., `Finance, Engineering`).
+- **Administrator** (role `ADMIN`): Full system access, including user management.
+- **Standard User** (role `USER`): Access limited to assigned departments. Users only see records matching their department (e.g., `Finance, Engineering`). A user with no departments sees all records. Only administrators can change roles or departments.
 
 ### Configuration Modes (Test vs Live)
 
 The system behavior is controlled by the `app.datasource.mode` configuration in `application.properties`:
 
 - **`test` (Default)**: Generates simulated metric data (0.9–1.0 range). Re-initializes the database with sample data if state is invalid. Ideal for local development.
-- **`live`**: Intended for connection to real external endpoints. Only basic system users are seeded, preserving any production-grade configuration.
+- **`live`**: Intended for connection to real external endpoints. Basic system users are seeded only when the user table is empty, preserving any production-grade configuration. A migrated or seeded `admin` must change its password at first login.
 
 ---
 
@@ -111,8 +111,11 @@ The API uses standard HTTP Basic Authentication or session-based cookies. Ensure
 | | `/metrics` | `POST` | Record a new SLI metric value. |
 | **Reports** | `/reports/pdf` | `POST` | Generate and download a PDF performance report. |
 | **Users** | `/users/me` | `GET` | Get details of the currently authenticated user. |
+| | `/users/me/password` | `PUT` | Change your own password (any logged-in user). |
 | | `/users` | `GET` | List all users (Admin only). |
 | | `/users` | `POST` | Create a new user (Admin only). |
+| | `/users/{id}` | `PUT` | Update a user, including role (Admin only). |
+| | `/users/{id}` | `DELETE` | Delete a user (Admin only). |
 | **Database** | `/database/tables` | `GET` | List all internal database tables (Admin only). |
 | | `/database/query` | `POST` | Execute a raw SQL `SELECT` query (Admin only). |
 
@@ -172,6 +175,8 @@ Stores user accounts and permissions.
 | `PASSWORD` | `VARCHAR` | BCrypt encoded password. |
 | `EMAIL` | `VARCHAR` | User email address. |
 | `DEPARTMENTS` | `VARCHAR` | Comma-separated list of allowed departments. |
+| `ROLE` | `VARCHAR` | `ADMIN` or `USER` (default). Access rights are derived from this column only. |
+| `PASSWORD_CHANGE_REQUIRED` | `BOOLEAN` | When true, the user must change the password before using the application. |
 
 ---
 

@@ -104,6 +104,26 @@ public class OpenSloServiceTest {
     }
 
     @Test
+    void userNamedAdminWithoutAdminRoleIsStillFilteredByDepartment() {
+        User user = new User("admin", "pass", "a@test.com", "Finance");
+        Authentication auth = new org.springframework.security.authentication.UsernamePasswordAuthenticationToken(
+                "admin", "pass", List.of(new org.springframework.security.core.authority.SimpleGrantedAuthority("ROLE_USER")));
+        SecurityContextHolder.setContext(new org.springframework.security.core.context.SecurityContextImpl(auth));
+        when(userRepository.findByUsername("admin")).thenReturn(Optional.of(user));
+
+        OpenSlo financeSlo = new OpenSlo("openslo/v1", "SLO", "FinanceSLO", "Finance SLO", "{}");
+        financeSlo.setDepartment("Finance");
+        OpenSlo hrSlo = new OpenSlo("openslo/v1", "SLO", "HRSLO", "HR SLO", "{}");
+        hrSlo.setDepartment("HR");
+        when(repository.findAll()).thenReturn(Arrays.asList(financeSlo, hrSlo));
+
+        List<OpenSlo> results = service.getAllRecords();
+
+        assertThat(results).extracting(OpenSlo::getName).containsExactly("FinanceSLO");
+        SecurityContextHolder.clearContext();
+    }
+
+    @Test
     void shouldGetRecordById() {
         when(repository.findById(1L)).thenReturn(Optional.of(slo));
 

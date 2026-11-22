@@ -2,6 +2,7 @@ package com.example.meloslo.config;
 
 import com.example.meloslo.model.SliMetric;
 import com.example.meloslo.model.OpenSlo;
+import com.example.meloslo.model.Role;
 import com.example.meloslo.model.User;
 import com.example.meloslo.repository.MetricRepository;
 import com.example.meloslo.repository.OpenSloRepository;
@@ -29,10 +30,21 @@ public class DataInitializer {
         return args -> {
             log.info("Starting startup database verification...");
             boolean needsInitialization = false;
+            boolean live = "live".equalsIgnoreCase(datasourceMode);
+
+            try {
+                backfillRoles(userRepository, live);
+            } catch (Exception e) {
+                log.error("Role backfill failed: {}", e.getMessage());
+            }
 
             try {
                 // 0. Check users
-                if (userRepository.findByUsername("admin").isEmpty() || userRepository.findByUsername("testuser").isEmpty()) {
+                // Live mode seeds only an uninitialized (empty) user table, never because "admin" is missing.
+                boolean usersMissing = live
+                    ? userRepository.count() == 0
+                    : userRepository.findByUsername("admin").isEmpty() || userRepository.findByUsername("testuser").isEmpty();
+                if (usersMissing) {
                     log.warn("Required users not found.");
                     needsInitialization = true;
                 }
@@ -85,7 +97,7 @@ public class DataInitializer {
             }
 
             if (needsInitialization) {
-                if ("live".equalsIgnoreCase(datasourceMode)) {
+                if (live) {
                     log.info("Database state invalid or incomplete, but datasource mode is LIVE. Seeding basic system users only.");
                     seedSystemUsers(userRepository, passwordEncoder);
                 } else {
@@ -117,8 +129,8 @@ public class DataInitializer {
         userRepository.deleteAll();
 
         // 0. Create Users
-        userRepository.save(new User("admin", passwordEncoder.encode("admin"), "admin@meloslo.com", null));
-        userRepository.save(new User("testuser", passwordEncoder.encode("testuser"), "testuser@finance.com", "Finance,Engineering"));
+        userRepository.save(new User("admin", passwordEncoder.encode("admin"), "admin@meloslo.com", null, Role.ADMIN));
+        userRepository.save(new User("testuser", passwordEncoder.encode("testuser"), "testuser@finance.com", "Finance,Engineering", Role.USER));
 
         // 1. Create a Business Service
         OpenSlo paymentService = new OpenSlo("openslo/v1", "BusinessService", "payment-service", "Payment Service", 
@@ -205,13 +217,33 @@ public class DataInitializer {
         log.info("Initialization complete.");
     }
 
+    /** Gives every user without a role one: "admin" becomes ADMIN, everyone else USER. */
+    private void backfillRoles(UserRepository userRepository, boolean live) {
+        for (User user : userRepository.findAll()) {
+            if (user.getRole() != null) {
+                continue;
+            }
+            if ("admin".equals(user.getUsername())) {
+                user.setRole(Role.ADMIN);
+                // In live mode the promoted admin may still have the default password.
+                user.setPasswordChangeRequired(live);
+                log.warn("Migrated user 'admin' to role ADMIN{}", live ? "; password change required" : "");
+            } else {
+                user.setRole(Role.USER);
+            }
+            userRepository.save(user);
+        }
+    }
+
     private void seedSystemUsers(UserRepository userRepository, PasswordEncoder passwordEncoder) {
-        if (userRepository.findByUsername("admin").isEmpty()) {
-            userRepository.save(new User("admin", passwordEncoder.encode("admin"), "admin@meloslo.com", null));
+        if (userRepository.count() > 0) {
+            return;
         }
-        if (userRepository.findByUsername("testuser").isEmpty()) {
-            userRepository.save(new User("testuser", passwordEncoder.encode("testuser"), "testuser@finance.com", "Finance,Engineering"));
-        }
+        User admin = new User("admin", passwordEncoder.encode("admin"), "admin@meloslo.com", null, Role.ADMIN);
+        // The default password is public, so it must be changed before anything else is used.
+        admin.setPasswordChangeRequired(true);
+        userRepository.save(admin);
+        userRepository.save(new User("testuser", passwordEncoder.encode("testuser"), "testuser@finance.com", "Finance,Engineering", Role.USER));
     }
 
     private OpenSlo createSli(OpenSloRepository repository, String name, String displayName, String query, OpenSlo datasource, String department) {

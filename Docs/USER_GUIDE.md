@@ -14,8 +14,10 @@ To access MeloSlo, you must first log in using your credentials. The platform su
 
 ![Login Screen](Screenshots/Screenshot%202026-04-06%20at%2008.42.34.png)
 
-*   **Default Administrator**: `admin` / `admin`
-*   **Test User**: `testuser` / `testuser`
+*   **Default Administrator**: `admin` / `admin` (role `ADMIN`)
+*   **Test User**: `testuser` / `testuser` (role `USER`)
+
+Access rights come from the user's stored role, not the username. In live mode, the `admin` account must change its password at first login. Until you do, the application shows a password change dialog and you are logged out after changing it.
 
 ### 1.2 Configuration Modes (Test vs Live)
 
@@ -129,6 +131,11 @@ Generate professional PDF reports that aggregate performance data over the last 
 
 ### 6.1 User Administration
 Administrators can manage user accounts, roles, and departmental access restrictions.
+
+- **Role**: Choose `Administrator` or `User` when creating or editing a user. Only administrators can change roles. The last administrator cannot be demoted or deleted.
+- **Departments**: Leave blank to see all departments. Separate multiple departments with commas.
+- **Changing a user**: Changing a user's role, password, or username, or deleting the user, logs that user out of open sessions.
+- **Your own password**: Every user can change their own password. Your role and departments are not affected.
 
 ![User Admin](Screenshots/Screenshot%202026-04-06%20at%2008.44.13.png)
 
