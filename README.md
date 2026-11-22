@@ -476,3 +476,4 @@ A join table representing the many-to-many relationship between SLOs and SLIs (O
 - **Backend**: Spring Boot, Java 26, Maven.
 - **Database**: H2 In-memory database (for development/demo).
 - **Frontend**: Vue.js 3, Tailwind CSS, ApexCharts.
+- **Continuous Integration**: GitHub Actions workflow `.github/workflows/ci.yml` runs `./mvnw -B verify` on every push and pull request (JDK 17). See [Docs/test.md](Docs/test.md#4-continuous-integration).
