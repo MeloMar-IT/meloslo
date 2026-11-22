@@ -48,7 +48,8 @@ These tests inherit from `BaseFunctionalTest` and use `TestRestTemplate` to perf
 - `H2ConsoleDefaultProfileTest`: With no profile set, `/h2-console` returns 404 for anonymous users and for `admin/admin`.
 - `H2ConsoleDevProfileTest`: Under `dev`, anonymous requests get 401, `testuser` gets 403, and `admin` gets a 2xx with `X-Frame-Options: SAMEORIGIN`.
 - `ProdProfileSecurityTest`: Under `prod`, `/h2-console` returns 404, no `testuser` exists, and `admin` cannot log in with `admin`.
-- `DataInitializerTest` covers live-mode admin creation: a random password of at least 20 characters, a configured password, a blank password falling back to random, an existing admin left unchanged, and two random passwords differing.
+- `DataInitializerTest` covers live-mode admin creation: a random password of at least 20 characters, a configured password, a blank password falling back to random, an existing admin left unchanged, and two random passwords differing. It also covers test-mode seeding: an empty database is seeded, existing data is never deleted, `app.seed=true` adds only missing records, and a failing database check seeds nothing.
+- `DataInitializerRestartTest`: Starts the real application twice on a file-based H2 database in a temporary folder. It checks that a restart keeps a user-created SLI and all other data, and that a deleted demo record is restored only with `app.seed=true`, leaving other data unchanged.
 - `MeloSloApplicationTests`: A simple sanity check to ensure the Spring application context loads correctly.
 
 ## 3. Running Tests

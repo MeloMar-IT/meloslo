@@ -11,6 +11,10 @@
 
 ### Changed
 - The "Query Tool" view is now "Database Tables" and only browses table lists and structures (#35).
+- Test mode seeds demo data only into an empty database. A restart no longer deletes or reloads existing data. New property `app.seed` (default `false`) adds only missing demo records and never deletes anything (#40).
+
+### Fixed
+- Restarting in test mode no longer wipes all records and users when a demo record was renamed or deleted, the `testuser` account was removed, or an SLI has fewer than 30 metrics, including SLIs created by users (#40).
 
 ## [0.1.0] - 2026-04-05
 ### Added
