@@ -136,19 +136,14 @@ public class ReportService {
             dateInfo.setSpacingAfter(20);
             document.add(dateInfo);
 
-            List<String> userDepts = openSloService.getCurrentUserDepartments();
-
+            // getRecordById applies the department check and returns only what the caller may see
             for (Long id : options.getIds()) {
                 openSloService.getRecordById(id).ifPresent(record -> {
-                    // Check access
-                    boolean hasAccess = userDepts.isEmpty() || userDepts.contains(record.getDepartment());
-                    if (hasAccess) {
-                        try {
-                            addRecordToPdf(document, record, since, now, subTitleFont, boldFont, normalFont, options);
-                            document.add(new Chunk("\n"));
-                        } catch (DocumentException e) {
-                            e.printStackTrace();
-                        }
+                    try {
+                        addRecordToPdf(document, record, since, now, subTitleFont, boldFont, normalFont, options);
+                        document.add(new Chunk("\n"));
+                    } catch (DocumentException e) {
+                        e.printStackTrace();
                     }
                 });
             }
@@ -186,7 +181,7 @@ public class ReportService {
         }
 
         if ("BusinessService".equalsIgnoreCase(record.getKind())) {
-            List<OpenSlo> slos = record.getSlos();
+            List<OpenSlo> slos = openSloService.getAccessibleSlos(record);
             if (slos == null || slos.isEmpty()) {
                 document.add(new Paragraph("No SLOs associated with this service.", normalFont));
             } else {

@@ -41,7 +41,7 @@ The application features a sidebar with the following views:
 - **Data Sources**: Manage your data source records (e.g., Prometheus).
 - **Alerting**: Manage your alerting source records (e.g., Slack webhooks) to receive notifications when SLOs are breached.
 - **Documentation**: Access this documentation directly in the app. For a comprehensive walkthrough of features, see the [MeloSlo User Guide](./Docs/USER_GUIDE.md).
-- **Query Tool**: Execute raw SQL queries against the database (Administrator only). Use this tool to inspect table structures (`api/v1/database/tables`) and verify raw data records across `OPEN_SLO`, `SLI_METRIC`, and `USER` tables. Only `SELECT` queries are permitted for security.
+- **Database Tables**: Browse the internal database tables and their structure (Administrator only), via `api/v1/database/tables`. The free-form SQL query console has been removed; see [Removed: SQL Query Console](#removed-sql-query-console).
 - **User Admin**: Manage user accounts and permissions (Administrator only).
 - **Reports**: Generate annual performance reports for Services and SLOs in PDF format, including performance graphs for the last year. Reports are compliance-aware and show data gaps as "No data" rather than as zero or healthy performance; the PDF and the dashboard use the same calculation rules.
 - **Trend Analysis**: Predictive modeling for SLOs to forecast error budget depletion using linear regression and weekly seasonality.
@@ -53,15 +53,31 @@ The application features a sidebar with the following views:
 
 MeloSlo includes a secure login system and administrative tools to manage users and access control.
 
-- **Default Administrator**: Username: `admin`, Password: `admin` (Full Access)
-- **Test User**: Username: `testuser`, Password: `testuser` (Restricted to 'Finance' and 'Engineering' departments)
+- **Default Administrator**: Username: `admin` (Full Access)
+  - **Test mode (`test`)**: Password `admin`. This is a demo account and must not be exposed.
+  - **Live mode (`live`)**: No fixed password. The password is taken from `APP_ADMIN_INITIAL_PASSWORD` (property `app.admin.initial-password`). If that is not set, a random 24-character password is generated and logged once at WARN level on first startup. Copy it from the log and change it after the first login.
+- **Test User**: Username: `testuser`, Password: `testuser` (Restricted to 'Finance' and 'Engineering' departments). Only seeded in test mode. Live mode never creates this account.
+
+### H2 Console
+
+The H2 database console (`/h2-console`) is **off by default**.
+
+- It is enabled only under the `dev` profile (`spring.h2.console.enabled=true`, `web-allow-others=false`).
+- When enabled, `/h2-console` requires the **ADMIN** role.
+- In the default profile and in `prod`, `/h2-console` returns **404**.
+
+### Removed: SQL Query Console
+
+Table inspection remains available to administrators (see [Database Tables](#database-tables-apiv1database-administrator-only) in the API Reference). The free-form SQL query console (`POST /api/v1/database/query`) has been removed, so H2 file and alias functions such as `FILE_READ`, `CSVWRITE` and `CREATE ALIAS` can no longer be run through the application.
 
 ### Application Modes: Test vs Live
 
 The application can run in two different modes, controlled by the `app.datasource.mode` property.
 
-- **Test Mode (`test`)**: (Default) The application generates simulated metric data for all configured DataSources. This is ideal for demonstrations, local development, and exploring the UI without needing real external connections. In this mode, the database is automatically reloaded with sample data on startup if it's found to be incomplete.
-- **Live Mode (`live`)**: The application attempts to connect to real external endpoints defined in your DataSources to fetch metrics. In this mode, the database initializer only seeds essential system users (`admin` and `testuser`) and does not automatically reload test data, preserving your existing configuration.
+- **Test Mode (`test`)**: (Default) The application generates simulated metric data for all configured DataSources. This is ideal for demonstrations, local development, and exploring the UI without needing real external connections. In this mode, sample data is seeded on startup only if the database is empty. Existing data is never deleted; set `app.seed=true` to add missing demo records (see [Startup Verification](#startup-verification)).
+- **Live Mode (`live`)**: The application attempts to connect to real external endpoints defined in your DataSources to fetch metrics. In this mode, the database initializer only creates the `admin` user, and only if it does not already exist. It does not create `testuser` and does not reload test data, preserving your existing configuration. See [Authentication and User Management](#authentication-and-user-management) for how the admin password is set.
+
+Test mode seeds the demo accounts `admin/admin` and `testuser/testuser` and logs a WARN that they are active. Do not expose a test-mode instance.
 
 To switch modes, update `src/main/resources/application.properties`:
 ```properties
@@ -78,8 +94,8 @@ MeloSlo supports different configuration files for Development, Testing, Accepta
 You can create environment-specific property files in `src/main/resources/` following the naming convention `application-{profile}.properties`.
 
 Example files provided:
-- `application-dev.properties` (Development/Test mode)
-- `application-prod.properties` (Production/Live mode)
+- `application-dev.properties` (Development/Test mode; also enables the H2 console)
+- `application-prod.properties` (Production/Live mode; H2 console off)
 
 To start the application with a specific profile, use the `-Dspring.profiles.active` system property:
 
@@ -106,9 +122,13 @@ java -jar target/meloslo-0.0.1-SNAPSHOT.jar --spring.config.additional-location=
 ```
 
 #### Access Control
-- **Full Access**: Administrators (users without departmental restrictions) see all records in the system.
-- **Departmental Restriction**: Users can be assigned to one or more departments (separated by commas). These users only see records associated with any of those departments across all views (Dashboard, Services, etc.).
+- **Full Access**: Administrators (`ADMIN` role) see and change all records in the system, including records without a department.
+- **Departmental Restriction**: Users can be assigned to one or more departments (separated by commas). These users only see, create, update and delete records whose department is one of their own, across all views (Dashboard, Services, Reports, etc.) and across the REST API.
 - **Multiple Departments**: A user can be granted access to multiple departments by listing them in their profile (e.g., `Finance,Engineering`). This allows them to monitor and manage records for all assigned departments simultaneously.
+- **Deny by Default**: A non-admin user with no departments assigned sees no records. Records without a department are visible to administrators only.
+- **Department Matching**: Department names are compared ignoring leading/trailing spaces and letter case (`finance` matches `Finance`) in every view and report.
+- **Moving Records**: A user cannot create a record in, or move an existing record to, a department they are not a member of. Such a request is refused with `403 Forbidden`.
+- **Consistent Answers**: A record outside your departments is treated as if it does not exist. It is absent from lists and reports, and by-id requests return `404 Not Found`. Linked records outside your departments (for example an SLI behind an SLO you can see) are removed from the response.
 
 ### Creating and Editing Records
 
@@ -321,7 +341,7 @@ MeloSlo supports storing actual performance metrics and calculating SLOs and Err
 MeloSlo allows you to generate professional PDF reports for your Services and SLOs.
 
 - **Time Period**: Reports always cover the performance over the last 365 days.
-- **Selection**: You can select one or more Services or SLOs to include in a single PDF report.
+- **Selection**: You can select one or more Services or SLOs to include in a single PDF report. Selected records outside your departments are skipped silently, and a Service only lists the child SLOs you can see.
 - **Content**: Each report includes:
   - Average performance (SLO value) over the last year.
   - Defined target for the SLO.
@@ -332,12 +352,16 @@ MeloSlo allows you to generate professional PDF reports for your Services and SL
 
 ## Startup Verification
 
-Upon startup, MeloSlo automatically verifies the state of the database. It checks for:
-- **Required Records**: Ensures that essential sample records (Services, DataSources, SLIs, and SLOs) are present.
-- **Metric Data**: Confirms that each test SLI has at least 30 days of performance data.
-- **Record Connections**: Verifies that all SLOs are correctly linked to a Service and their respective SLIs.
+In test mode, the startup check seeds the demo data only when the database is empty (no OpenSLO records and no users). A database that already contains data is never deleted, reloaded or changed by the check: records you created, renamed or deleted, and users you added, survive every restart.
 
-If any of these conditions are not met, the application will automatically reload the test data from scratch to ensure a consistent environment for demonstration and testing.
+To add the missing demo records to a non-empty database, start the application with `app.seed=true` (property, default `false`, test mode only). This mode:
+- Adds only demo records and demo users that are missing, looked up by name or username. Existing records keep their data, and existing passwords are not changed.
+- Generates 30 days of metric data only for demo SLIs that are created in that run.
+- Never deletes anything.
+
+If the emptiness check fails with a database error, the check logs an error and seeds nothing.
+
+In live mode, `app.seed` is ignored and a WARN is logged. Live mode never seeds demo data.
 
 ### Metric Records
 
@@ -392,21 +416,21 @@ Manage Services, SLIs, SLOs, and DataSources.
 - **`GET /api/v1/openslo/dashboard-stats`**: Retrieve aggregated statistics for the dashboard.
   - **Response**: `DashboardStats` object (Total Services, SLOs, Healthy, Warning, Breaching, No data).
 - **`GET /api/v1/openslo/{id}`**: Retrieve a specific record by its database ID.
-  - **Response**: A single OpenSlo object or 404.
+  - **Response**: A single OpenSlo object or 404. A record in another department returns 404.
 - **`POST /api/v1/openslo`**: Create a new OpenSLO record.
-  - **Request Body**: JSON representation of an `OpenSlo` object. Required fields: `apiVersion`, `kind`, `name`, `spec`.
-  - **Response**: The created record (201 Created).
+  - **Request Body**: JSON representation of an `OpenSlo` object. Required fields: `apiVersion`, `kind`, `name`, `spec`. The body must not contain an `id`.
+  - **Response**: The created record (201 Created). 400 if the body contains an `id`; 403 if `department` is not one of the caller's departments.
 - **`PUT /api/v1/openslo/{id}`**: Update an existing record.
   - **Request Body**: JSON representation of the updated `OpenSlo` object.
-  - **Response**: The updated record.
+  - **Response**: The updated record. 404 if the record does not exist or is in another department. 403 if the new `department` is not one of the caller's departments; nothing is changed in that case.
 - **`DELETE /api/v1/openslo/{id}`**: Delete a record and its associations.
-  - **Response**: 204 No Content.
+  - **Response**: 204 No Content. 404 if the record does not exist or is in another department. 403 when deleting an AlertingSource that is used by an SLO in another department.
 - **`GET /api/v1/openslo/{id}/report`**: (SLO records only) Retrieve a comprehensive status report.
-  - **Response**: `SloReport` containing current value, target, status (Healthy/Warning/Breaching/No data), and error budget. When there is no data, `currentValue` and `errorBudget` are `null`.
+  - **Response**: `SloReport` containing current value, target, status (Healthy/Warning/Breaching/No data), and error budget. When there is no data, `currentValue` and `errorBudget` are `null`. Only SLIs visible to the caller contribute; 404 for records in another department.
 - **`GET /api/v1/openslo/{id}/service-report`**: (Service records only) Retrieve a report for all SLOs in a service.
-  - **Response**: `ServiceReport` aggregating data from all child SLOs.
+  - **Response**: `ServiceReport` aggregating data from all child SLOs the caller can see. 404 for records in another department.
 - **`GET /api/v1/openslo/{id}/sli-report`**: (SLI records only) Retrieve a detailed performance report for an SLI.
-  - **Response**: `SliReport` containing recent metric history and averages.
+  - **Response**: `SliReport` containing recent metric history and averages. 404 for records in another department.
 
 ### Metrics API (`/api/v1/metrics`)
 
@@ -418,14 +442,11 @@ Manage raw performance data.
   - **Request Body**: `SliMetric` object linking to an SLI and DataSource.
   - **Response**: The created metric (201 Created).
 
-### Database Query Tool (`/api/v1/database`) (Administrator Only)
+### Database Tables (`/api/v1/database`) (Administrator Only)
 
-Power user tools for database exploration. Access is restricted to users with the **ADMIN** role.
+Tools for database inspection. Access is restricted to users with the **ADMIN** role.
 
-- **`POST /api/v1/database/query`**: Execute a raw SQL query.
-  - **Request Body**: `{"sql": "SELECT * FROM openslo_records"}`.
-  - **Constraint**: Only `SELECT` statements are permitted for security reasons.
-  - **Response**: List of results as JSON objects.
+- **`POST /api/v1/database/query`**: Removed. The arbitrary SQL endpoint was closed because a keyword-only `SELECT` filter could not stop H2 functions that read files or define aliases.
 - **`GET /api/v1/database/tables`**: List all tables in the database.
   - **Response**: List of table name strings.
 - **`GET /api/v1/database/tables/{tableName}/structure`**: Retrieve schema information for a specific table.
