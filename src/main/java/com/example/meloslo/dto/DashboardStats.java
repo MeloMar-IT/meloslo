@@ -6,15 +6,29 @@ public class DashboardStats {
     private long healthySlos;
     private long warningSlos;
     private long breachingSlos;
+    private long noDataSlos;
 
     public DashboardStats() {}
 
     public DashboardStats(long totalServices, long totalSlos, long healthySlos, long warningSlos, long breachingSlos) {
+        this(totalServices, totalSlos, healthySlos, warningSlos, breachingSlos, 0);
+    }
+
+    public DashboardStats(long totalServices, long totalSlos, long healthySlos, long warningSlos, long breachingSlos, long noDataSlos) {
         this.totalBusinessServices = totalServices;
         this.totalSlos = totalSlos;
         this.healthySlos = healthySlos;
         this.warningSlos = warningSlos;
         this.breachingSlos = breachingSlos;
+        this.noDataSlos = noDataSlos;
+    }
+
+    public long getNoDataSlos() {
+        return noDataSlos;
+    }
+
+    public void setNoDataSlos(long noDataSlos) {
+        this.noDataSlos = noDataSlos;
     }
 
     public long getTotalBusinessServices() {

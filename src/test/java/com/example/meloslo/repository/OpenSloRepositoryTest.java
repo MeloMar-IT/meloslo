@@ -37,6 +37,22 @@ public class OpenSloRepositoryTest {
     }
 
     @Test
+    void shouldRecordFetchFailureOnSli() {
+        OpenSlo sli = new OpenSlo("openslo/v1", "SLI", "FailingSli", "Failing SLI", "{}");
+        entityManager.persist(sli);
+        entityManager.flush();
+        LocalDateTime when = LocalDateTime.of(2026, 1, 2, 3, 4, 5);
+
+        int updated = repository.recordFetchFailure(sli.getId(), when, "boom");
+        entityManager.clear();
+
+        assertThat(updated).isEqualTo(1);
+        OpenSlo reloaded = entityManager.find(OpenSlo.class, sli.getId());
+        assertThat(reloaded.getLastFetchFailureTime()).isEqualTo(when);
+        assertThat(reloaded.getLastFetchError()).isEqualTo("boom");
+    }
+
+    @Test
     void shouldReturnEmptyForNonExistentName() {
         Optional<OpenSlo> found = repository.findByName("NonExistent");
 

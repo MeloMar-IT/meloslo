@@ -2,6 +2,7 @@ package com.example.meloslo.controller;
 
 import com.example.meloslo.config.SecurityConfig;
 import com.example.meloslo.model.SliMetric;
+import com.example.meloslo.service.InvalidSliValueException;
 import com.example.meloslo.service.OpenSloService;
 import com.example.meloslo.repository.UserRepository;
 import org.junit.jupiter.api.Test;
@@ -19,6 +20,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @WebMvcTest(MetricController.class)
@@ -64,8 +66,20 @@ class MetricControllerUnitTest {
 
         mockMvc.perform(post("/api/v1/metrics")
                 .contentType(MediaType.APPLICATION_JSON)
-                .content("{\"value\": 0.95}"))
+                .content("{\"value\": 95.0}"))
                 .andExpect(status().isCreated());
+    }
+
+    @Test
+    @WithMockUser(roles = "ADMIN")
+    void shouldReturnBadRequestWhenMetricValueIsInvalid() throws Exception {
+        when(service.createMetric(any())).thenThrow(new InvalidSliValueException("SLI metric value must be between 0 and 100, got 150.0"));
+
+        mockMvc.perform(post("/api/v1/metrics")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"value\": 150.0}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("SLI metric value must be between 0 and 100, got 150.0"));
     }
 
     @Test
@@ -73,7 +87,7 @@ class MetricControllerUnitTest {
     void shouldDenyCreateMetricWhenUser() throws Exception {
         mockMvc.perform(post("/api/v1/metrics")
                 .contentType(MediaType.APPLICATION_JSON)
-                .content("{\"value\": 0.95}"))
+                .content("{\"value\": 95.0}"))
                 .andExpect(status().isForbidden());
     }
 }

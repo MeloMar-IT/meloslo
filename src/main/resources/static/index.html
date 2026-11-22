@@ -150,7 +150,7 @@
                     <a href="#" class="flex items-center space-x-3 px-3 py-2 rounded-lg text-slate-600 hover:bg-slate-50 transition-colors"
                        :class="{ 'sidebar-active': currentView === 'query' }" @click="currentView = 'query'" v-if="isAdmin">
                         <i class="fas fa-terminal w-5"></i>
-                        <span class="font-medium">Query Tool</span>
+                        <span class="font-medium">Database Tables</span>
                     </a>
                     <a href="#" class="flex items-center space-x-3 px-3 py-2 rounded-lg text-slate-600 hover:bg-slate-50 transition-colors"
                        :class="{ 'sidebar-active': currentView === 'users' }" @click="currentView = 'users'" v-if="isAdmin">
@@ -190,7 +190,7 @@
                 <div class="p-8">
                     <!-- Dashboard View -->
                     <div v-if="currentView === 'dashboard'">
-                        <div class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-6 mb-8">
+                        <div class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-6 mb-8">
                             <div class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
                                 <div class="flex items-center justify-between mb-4">
                                     <h3 class="text-slate-500 font-medium text-sm">Business Services</h3>
@@ -226,6 +226,13 @@
                                 </div>
                                 <p class="text-3xl font-bold text-slate-800">{{ breachingCount }}</p>
                             </div>
+                            <div class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+                                <div class="flex items-center justify-between mb-4">
+                                    <h3 class="text-slate-500 font-medium text-sm">No data</h3>
+                                    <span class="p-2 bg-slate-100 text-slate-500 rounded-lg"><i class="fas fa-question-circle"></i></span>
+                                </div>
+                                <p class="text-3xl font-bold text-slate-800">{{ noDataCount }}</p>
+                            </div>
                         </div>
 
                         <!-- Recent Activity / Overview Table -->
@@ -253,7 +260,7 @@
                                         </td>
                                         <td class="px-6 py-4">
                                             <span class="text-sm font-bold text-slate-700">
-                                                {{ slo.currentValue ? (slo.currentValue * 100).toFixed(3) : 'N/A' }}%
+                                                {{ slo.currentValue != null ? slo.currentValue.toFixed(3) + '%' : 'No data' }}
                                             </span>
                                         </td>
                                         <td class="px-6 py-4">
@@ -300,7 +307,7 @@
                                         </td>
                                         <td class="px-6 py-4">
                                             <span class="text-sm font-bold text-slate-700">
-                                                {{ service.currentValue ? (service.currentValue * 100).toFixed(3) : '100.000' }}%
+                                                {{ service.currentValue != null ? service.currentValue.toFixed(3) + '%' : 'No data' }}
                                             </span>
                                         </td>
                                         <td class="px-6 py-4">
@@ -356,14 +363,14 @@
                                         </td>
                                         <td class="px-6 py-4">
                                             <div class="text-sm font-medium text-slate-700" v-if="getSpecField(slo.spec, 'objectives')">
-                                                {{ (getSpecField(slo.spec, 'objectives')[0].ratioMetrics?.target * 100) || 'N/A' }}% / 
+                                                {{ slo.target != null ? slo.target.toFixed(2) : 'N/A' }}% / 
                                                 {{ getSpecField(slo.spec, 'timeWindow') ? getSpecField(slo.spec, 'timeWindow')[0].duration : '30d' }}
                                             </div>
                                             <div class="text-xs text-slate-400" v-else>No objectives set</div>
                                         </td>
                                         <td class="px-6 py-4">
                                             <span class="text-sm font-bold text-slate-700">
-                                                {{ slo.currentValue ? (slo.currentValue * 100).toFixed(3) : 'N/A' }}%
+                                                {{ slo.currentValue != null ? slo.currentValue.toFixed(3) + '%' : 'No data' }}
                                             </span>
                                         </td>
                                         <td class="px-6 py-4">
@@ -473,7 +480,7 @@
                                         <div class="flex justify-between items-center">
                                             <span class="text-slate-500">Current Average:</span>
                                             <span class="font-bold text-lg text-blue-600">
-                                                {{ (selectedSliReport.currentValue * 100).toFixed(3) }}%
+                                                {{ selectedSliReport.currentValue != null ? selectedSliReport.currentValue.toFixed(3) + '%' : 'No data' }}
                                             </span>
                                         </div>
                                     </div>
@@ -495,7 +502,7 @@
                                             <tbody class="divide-y divide-slate-100">
                                                 <tr v-for="m in selectedSliReport.recentMetrics.slice(0, 10)" :key="m.id">
                                                     <td class="py-2 px-2 text-slate-600">{{ new Date(m.timestamp).toLocaleString() }}</td>
-                                                    <td class="py-2 px-2 text-right font-medium">{{ (m.value * 100).toFixed(2) }}%</td>
+                                                    <td class="py-2 px-2 text-right font-medium">{{ m.value.toFixed(2) }}%</td>
                                                 </tr>
                                             </tbody>
                                         </table>
@@ -556,25 +563,25 @@
                                 <div class="flex justify-between items-start mb-4">
                                     <div>
                                         <h4 class="font-bold text-slate-800">{{ report.name }}</h4>
-                                        <p class="text-xs text-slate-500">Target: {{ (report.target * 100).toFixed(2) }}%</p>
+                                        <p class="text-xs text-slate-500">Target: {{ report.target != null ? report.target.toFixed(2) + '%' : 'N/A (invalid target)' }}</p>
                                     </div>
-                                    <span :class="report.currentValue >= report.target ? 'text-green-600' : 'text-red-600'" class="flex items-center text-sm font-bold">
+                                    <span :class="report.currentValue == null ? 'text-slate-400' : (report.target != null && report.currentValue >= report.target ? 'text-green-600' : 'text-red-600')" class="flex items-center text-sm font-bold">
                                         <i class="fas fa-circle text-[8px] mr-1.5"></i>
-                                        {{ (report.currentValue * 100).toFixed(3) }}%
+                                        {{ report.currentValue != null ? report.currentValue.toFixed(3) + '%' : 'No data' }}
                                     </span>
                                 </div>
                                 
                                 <div class="space-y-3">
                                     <div class="flex justify-between text-xs">
                                         <span class="text-slate-500">Error Budget:</span>
-                                        <span :class="report.errorBudget > 0 ? 'text-blue-600' : 'text-red-600'" class="font-bold">
-                                            {{ report.errorBudget.toFixed(2) }}%
+                                        <span :class="report.errorBudget == null ? 'text-slate-400' : (report.errorBudget > 0 ? 'text-blue-600' : 'text-red-600')" class="font-bold">
+                                            {{ report.errorBudget != null ? report.errorBudget.toFixed(2) + '%' : (report.target == null ? 'Unknown' : 'No data') }}
                                         </span>
                                     </div>
                                     <div class="w-full bg-slate-100 rounded-full h-1.5 overflow-hidden">
-                                        <div class="h-full rounded-full transition-all duration-500" 
-                                             :class="report.errorBudget > 20 ? 'bg-blue-500' : (report.errorBudget > 0 ? 'bg-yellow-500' : 'bg-red-500')"
-                                             :style="{ width: Math.max(0, Math.min(100, report.errorBudget)) + '%' }"></div>
+                                        <div class="h-full rounded-full transition-all duration-500"
+                                             :class="report.errorBudget == null ? 'bg-slate-300' : (report.errorBudget > 20 ? 'bg-blue-500' : (report.errorBudget > 0 ? 'bg-yellow-500' : 'bg-red-500'))"
+                                             :style="{ width: (report.errorBudget == null ? 0 : Math.max(0, Math.min(100, report.errorBudget))) + '%' }"></div>
                                     </div>
                                     <div class="pt-2 flex justify-end">
                                         <button @click="viewDetails(slos.find(s => s.name === report.name))" class="text-xs text-blue-600 font-medium hover:underline">
@@ -728,22 +735,22 @@
                                         </div>
                                         <div class="flex justify-between items-center">
                                             <span class="text-slate-500">Current Value:</span>
-                                            <span class="font-bold text-lg" :class="selectedSloReport.currentValue >= selectedSloReport.target ? 'text-green-600' : 'text-red-600'">
-                                                {{ (selectedSloReport.currentValue * 100).toFixed(3) }}%
+                                            <span class="font-bold text-lg" :class="selectedSloReport.currentValue == null ? 'text-slate-400' : (selectedSloReport.target != null && selectedSloReport.currentValue >= selectedSloReport.target ? 'text-green-600' : 'text-red-600')">
+                                                {{ selectedSloReport.currentValue != null ? selectedSloReport.currentValue.toFixed(3) + '%' : 'No data' }}
                                             </span>
                                         </div>
                                         <div class="flex justify-between items-center">
                                             <span class="text-slate-500">Target:</span>
-                                            <span class="font-medium">{{ (selectedSloReport.target * 100).toFixed(2) }}%</span>
+                                            <span class="font-medium">{{ selectedSloReport.target != null ? selectedSloReport.target.toFixed(2) + '%' : 'N/A (invalid target)' }}</span>
                                         </div>
                                         <div class="flex justify-between items-center">
                                             <span class="text-slate-500">Error Budget:</span>
-                                            <span class="font-bold" :class="selectedSloReport.errorBudget >= 0 ? 'text-blue-600' : 'text-red-600'">
-                                                {{ selectedSloReport.errorBudget.toFixed(2) }}%
+                                            <span class="font-bold" :class="selectedSloReport.errorBudget == null ? 'text-slate-400' : (selectedSloReport.errorBudget >= 0 ? 'text-blue-600' : 'text-red-600')">
+                                                {{ selectedSloReport.errorBudget != null ? selectedSloReport.errorBudget.toFixed(2) + '%' : (selectedSloReport.target == null ? 'Unknown' : 'No data') }}
                                             </span>
                                         </div>
                                         <div class="w-full bg-slate-100 rounded-full h-2 mt-2">
-                                            <div class="bg-blue-600 h-2 rounded-full" :style="{ width: Math.max(0, Math.min(100, selectedSloReport.errorBudget)) + '%' }"></div>
+                                            <div class="bg-blue-600 h-2 rounded-full" :style="{ width: (selectedSloReport.errorBudget == null ? 0 : Math.max(0, Math.min(100, selectedSloReport.errorBudget))) + '%' }"></div>
                                         </div>
                                     </div>
                                     <div v-else class="flex justify-center py-4">
@@ -764,7 +771,7 @@
                                             <tbody class="divide-y divide-slate-100">
                                                 <tr v-for="m in selectedSloReport.recentMetrics.slice(0, 10)" :key="m.id">
                                                     <td class="py-2 px-2 text-slate-600">{{ new Date(m.timestamp).toLocaleString() }}</td>
-                                                    <td class="py-2 px-2 text-right font-medium">{{ (m.value * 100).toFixed(2) }}%</td>
+                                                    <td class="py-2 px-2 text-right font-medium">{{ m.value.toFixed(2) }}%</td>
                                                 </tr>
                                             </tbody>
                                         </table>
@@ -893,7 +900,7 @@
                                         <li><strong>Error Budget:</strong> The amount of unreliability you can afford before violating your SLO.</li>
                                         <li><strong>Alerting Source:</strong> A record defining a webhook (e.g. Slack) to notify when an SLO is breached. Includes variables like <code>${SLO_NAME}</code> and 6h anti-spam.</li>
                                         <li><strong>Background Processing:</strong> All heavy tasks (fetching metrics, sending alerts) run in background threads with a 5-minute timeout watchdog for stability.</li>
-                                        <li><strong>Status Thresholds:</strong> SLOs are <strong>Healthy</strong> (Budget &ge; 25%), <strong>Warning</strong> (0% to 25%), or <strong>Breaching</strong> (&lt; 0%).</li>
+                                        <li><strong>Status Thresholds:</strong> SLOs are <strong>Healthy</strong> (Budget &ge; 25%), <strong>Warning</strong> (0% to 25%), or <strong>Breaching</strong> (&lt; 0%), or <strong>No data</strong> when the window has no samples.</li>
                                     </ul>
                                 </div>
                             </section>
@@ -911,7 +918,7 @@
                                             </div>
                                             <div>
                                                 <h4 class="font-bold text-slate-800 text-sm">Role: Administrator (Full Access)</h4>
-                                                <p class="text-[11px] text-slate-500">Users without an assigned department can see and manage all records across the entire application and access the User Admin and Database Query tools.</p>
+                                                <p class="text-[11px] text-slate-500">Users without an assigned department can see and manage all records across the entire application and access the User Admin and Database Tables tools.</p>
                                             </div>
                                         </div>
                                         <div class="flex items-start space-x-3">
@@ -925,7 +932,7 @@
                                         </div>
                                     </div>
                                     <div class="mt-4 p-4 bg-white rounded-xl border border-slate-200">
-                                        <h4 class="font-bold text-xs text-slate-400 uppercase tracking-widest mb-2">Test Accounts:</h4>
+                                        <h4 class="font-bold text-xs text-slate-400 uppercase tracking-widest mb-2">Test Accounts (test mode only):</h4>
                                         <div class="grid grid-cols-2 gap-4 text-xs">
                                             <div class="bg-slate-50 p-2 rounded-lg border border-slate-100">
                                                 <span class="font-bold text-slate-700">Admin:</span> admin / admin
@@ -973,7 +980,7 @@
                                     </div>
                                     <div>
                                         <h4 class="font-bold text-slate-800 mb-1">8. Database Maintenance</h4>
-                                        <p class="text-sm text-slate-600">Administrators can use the 'Query Tool' to run <code>SELECT</code> queries against the internal database to audit records or inspect table structures.</p>
+                                        <p class="text-sm text-slate-600">Administrators can use the 'Database Tables' view to browse the internal tables and inspect their structure.</p>
                                     </div>
                                     <div>
                                         <h4 class="font-bold text-slate-800 mb-1">9. Thread Stability</h4>
@@ -1217,45 +1224,8 @@ spec:
                                 </div>
                             </div>
 
-                            <!-- Query Area -->
+                            <!-- Table Structure Area -->
                             <div class="col-span-12 lg:col-span-9 space-y-6">
-                                <div class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
-                                    <h2 class="text-2xl font-bold text-slate-800 mb-4 flex items-center">
-                                        <i class="fas fa-database text-blue-600 mr-3"></i> SQL Query Tool
-                                    </h2>
-                                    <p class="text-slate-500 text-sm mb-6">
-                                        Execute raw SQL queries against the H2 database. For security reasons, only <span class="font-bold text-slate-700">SELECT</span> statements are permitted.
-                                    </p>
-                                    
-                                    <div class="space-y-4">
-                                        <div>
-                                            <label class="block text-sm font-bold text-slate-700 mb-2 uppercase tracking-wider">SQL Statement</label>
-                                            <textarea 
-                                                v-model="querySql" 
-                                                class="w-full h-32 p-4 bg-slate-900 text-emerald-400 font-mono text-sm rounded-xl border border-slate-700 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all shadow-inner"
-                                                placeholder="SELECT * FROM openslo_records LIMIT 10"
-                                            ></textarea>
-                                        </div>
-                                        
-                                        <div class="flex items-center justify-between">
-                                            <div class="flex space-x-2">
-                                                <button @click="querySql = 'SELECT * FROM openslo_records'" class="px-3 py-1 bg-slate-100 hover:bg-slate-200 text-slate-600 text-[11px] font-bold rounded-lg transition-colors uppercase">All Records</button>
-                                                <button @click="querySql = 'SELECT * FROM sli_metric ORDER BY timestamp DESC LIMIT 50'" class="px-3 py-1 bg-slate-100 hover:bg-slate-200 text-slate-600 text-[11px] font-bold rounded-lg transition-colors uppercase">Recent Metrics</button>
-                                                <button @click="querySql = 'SELECT kind, count(*) FROM openslo_records GROUP BY kind'" class="px-3 py-1 bg-slate-100 hover:bg-slate-200 text-slate-600 text-[11px] font-bold rounded-lg transition-colors uppercase">Stats</button>
-                                            </div>
-                                            <button 
-                                                @click="runQuery" 
-                                                :disabled="isQueryLoading"
-                                                class="px-6 py-2 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 transition-all shadow-lg shadow-blue-200 flex items-center disabled:opacity-50"
-                                            >
-                                                <i v-if="isQueryLoading" class="fas fa-spinner fa-spin mr-2"></i>
-                                                <i v-else class="fas fa-play mr-2 text-xs"></i>
-                                                Execute Query
-                                            </button>
-                                        </div>
-                                    </div>
-                                </div>
-
                                 <!-- Table Structure View -->
                                 <div v-if="selectedTableStructure" class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden animate__animated animate__fadeIn">
                                     <div class="p-4 border-b border-slate-100 bg-slate-50/50 flex justify-between items-center">
@@ -1264,7 +1234,6 @@ spec:
                                             <span class="text-xs font-bold text-slate-500 uppercase tracking-widest">Structure: {{ selectedTableName }}</span>
                                         </div>
                                         <div class="flex space-x-2">
-                                            <button @click="querySql = 'SELECT * FROM ' + selectedTableName; runQuery();" class="text-blue-600 hover:text-blue-800 text-[10px] font-bold uppercase">Query Table</button>
                                             <button @click="selectedTableStructure = null; selectedTableName = ''" class="text-slate-400 hover:text-slate-600 text-xs font-medium"><i class="fas fa-times"></i></button>
                                         </div>
                                     </div>
@@ -1294,47 +1263,12 @@ spec:
                                     </div>
                                 </div>
 
-                                <!-- Query Results -->
-                                <div v-if="queryError" class="bg-red-50 border border-red-100 text-red-600 p-4 rounded-xl flex items-start space-x-3">
-                                    <i class="fas fa-exclamation-triangle mt-1"></i>
-                                    <div>
-                                        <p class="font-bold text-sm">Query Execution Failed</p>
-                                        <p class="text-xs opacity-90">{{ queryError }}</p>
-                                    </div>
-                                </div>
-
-                                <div v-if="queryResults.length > 0" class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-                                    <div class="p-4 border-b border-slate-100 bg-slate-50/50 flex justify-between items-center">
-                                        <span class="text-xs font-bold text-slate-500 uppercase tracking-widest">Results ({{ queryResults.length }})</span>
-                                        <button @click="queryResults = []" class="text-slate-400 hover:text-slate-600 text-xs font-medium">Clear</button>
-                                    </div>
-                                    <div class="overflow-x-auto max-h-[500px]">
-                                        <table class="w-full text-left border-collapse">
-                                            <thead class="bg-white sticky top-0 shadow-sm">
-                                                <tr>
-                                                    <th v-for="key in Object.keys(queryResults[0])" :key="key" class="px-6 py-4 text-[11px] font-bold text-slate-500 uppercase tracking-wider border-b border-slate-100">
-                                                        {{ key }}
-                                                    </th>
-                                                </tr>
-                                            </thead>
-                                            <tbody class="divide-y divide-slate-50">
-                                                <tr v-for="(row, idx) in queryResults" :key="idx" class="hover:bg-slate-50 transition-colors">
-                                                    <td v-for="key in Object.keys(queryResults[0])" :key="key" class="px-6 py-4 text-sm text-slate-600 whitespace-nowrap">
-                                                        <div class="max-w-xs truncate" :title="row[key]">
-                                                            {{ row[key] }}
-                                                        </div>
-                                                    </td>
-                                                </tr>
-                                            </tbody>
-                                        </table>
-                                    </div>
-                                </div>
-                                <div v-else-if="!isQueryLoading && !queryError && querySql && !selectedTableStructure" class="bg-white p-12 rounded-2xl border border-slate-200 shadow-sm text-center">
+                                <div v-else class="bg-white p-12 rounded-2xl border border-slate-200 shadow-sm text-center">
                                     <div class="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center text-slate-300 mx-auto mb-4">
                                         <i class="fas fa-table text-2xl"></i>
                                     </div>
-                                    <h3 class="text-slate-800 font-bold">No data to display</h3>
-                                    <p class="text-slate-500 text-sm">Execute a query or select a table to see details here.</p>
+                                    <h3 class="text-slate-800 font-bold">No table selected</h3>
+                                    <p class="text-slate-500 text-sm">Select a table to see its structure.</p>
                                 </div>
                             </div>
                         </div>
@@ -1852,7 +1786,7 @@ spec:
                 const isUserEditing = ref(false);
                 const userForm = ref({ id: null, username: '', email: '', password: '', departments: '' });
 
-                const dashboardStats = ref({ totalServices: 0, totalSlos: 0, healthySlos: 0, warningSlos: 0, breachingSlos: 0 });
+                const dashboardStats = ref({ totalServices: 0, totalSlos: 0, healthySlos: 0, warningSlos: 0, breachingSlos: 0, noDataSlos: 0 });
                 const currentView = ref('dashboard');
                 const records = ref([]);
                 const searchQuery = ref('');
@@ -1869,10 +1803,6 @@ spec:
                 const selectedServiceReport = ref(null);
                 const selectedDs = ref(null);
                 const notification = ref(null);
-                const querySql = ref('SELECT * FROM openslo_records LIMIT 10');
-                const queryResults = ref([]);
-                const queryError = ref('');
-                const isQueryLoading = ref(false);
                 const dbTables = ref([]);
                 const selectedTableStructure = ref(null);
 
@@ -1911,7 +1841,7 @@ spec:
                         description: 'Retrieve aggregated statistics for the dashboard.',
                         usage: 'Returns counts for total Services, SLOs, and SLOs categorized by health status (Healthy, Warning, Breaching).',
                         requestJson: null,
-                        responseJson: '{\n  "totalServices": 5,\n  "totalSlos": 12,\n  "healthySlos": 8,\n  "warningSlos": 2,\n  "breachingSlos": 2\n}'
+                        responseJson: '{\n  "totalServices": 5,\n  "totalSlos": 12,\n  "healthySlos": 8,\n  "warningSlos": 2,\n  "breachingSlos": 2,\n  "noDataSlos": 0\n}'
                     },
                     {
                         method: 'GET',
@@ -1959,7 +1889,7 @@ spec:
                         description: 'Get an aggregated health report for all SLOs in a Service.',
                         usage: 'Aggregates metrics and status for every SLO associated with the given Service ID.',
                         requestJson: null,
-                        responseJson: '{\n  "serviceName": "Web API",\n  "sloReports": [\n    {\n      "sloName": "API Latency",\n      "currentValue": 0.95,\n      "target": 0.99,\n      "status": "Warning",\n      ...\n    }\n  ]\n}'
+                        responseJson: '{\n  "serviceName": "Web API",\n  "sloReports": [\n    {\n      "sloName": "API Latency",\n      "currentValue": 95.0,\n      "target": 99.0,\n      "status": "Warning",\n      ...\n    }\n  ]\n}'
                     },
                     {
                         method: 'GET',
@@ -1976,14 +1906,6 @@ spec:
                         usage: 'Used by the frontend to determine permissions and show user profile details.',
                         requestJson: null,
                         responseJson: '{\n  "username": "admin",\n  "email": "admin@example.com",\n  "departments": "Finance,Engineering"\n}'
-                    },
-                    {
-                        method: 'POST',
-                        path: '/api/v1/database/query',
-                        description: 'Execute a raw SQL SELECT query (Admin Only).',
-                        usage: 'Allows direct database inspection. Restricted to SELECT statements for safety.',
-                        requestJson: '{\n  "sql": "SELECT * FROM openslo_records"\n}',
-                        responseJson: '[\n  {\n    "ID": 1,\n    "NAME": "api-latency",\n    ...\n  }\n]'
                     },
                     {
                         method: 'POST',
@@ -2179,7 +2101,7 @@ spec:
                     if (currentView.value === 'sli-details') return 'SLI Details';
                     if (currentView.value === 'service-details') return 'Business Services Deatils';
                     if (currentView.value === 'docs') return 'Documentation';
-                    if (currentView.value === 'query') return 'Query Tool';
+                    if (currentView.value === 'query') return 'Database Tables';
                     if (currentView.value === 'reports') return 'Annual Reports';
                     return '';
                 });
@@ -2195,6 +2117,7 @@ spec:
                 const healthyCount = computed(() => dashboardStats.value.healthySlos);
                 const warningCount = computed(() => dashboardStats.value.warningSlos);
                 const breachingCount = computed(() => dashboardStats.value.breachingSlos);
+                const noDataCount = computed(() => dashboardStats.value.noDataSlos || 0);
 
                 const filteredSlos = computed(() => {
                     if (!searchQuery.value) return slos.value;
@@ -2619,11 +2542,12 @@ spec:
                 };
 
                 const getStatusText = (slo) => {
-                    return slo.status || 'Healthy';
+                    return slo.status || 'No data';
                 };
 
                 const getStatusClass = (slo) => {
                     const status = getStatusText(slo);
+                    if (status === 'No data') return 'text-slate-400';
                     if (status === 'Healthy') return 'text-green-600';
                     if (status === 'Warning') return 'text-yellow-600';
                     return 'text-red-600';
@@ -2662,63 +2586,71 @@ spec:
                             
                             series.push({
                                 name: 'SLO Value (%)',
-                                data: sloValues.map(v => v.toFixed(3))
+                                data: sloValues.map(v => v == null ? null : v.toFixed(3))
                             });
                             categories = historicalLabels;
-                            targetValue = report.target !== undefined ? report.target * 100 : null;
+                            targetValue = report.target !== undefined ? report.target : null;
                         }
                         // Calculate error budget points for the main series if it's an SLO chart
-                        else if (selector === '#chart' && report.target !== undefined) {
+                        else if (selector === '#chart' && report.target != null) {
+                            // Same daily series as the PDF and the SLO value chart: built from ALL window samples
+                            // (historicalSloValues, one entry per day ending today), so nothing is capped and
+                            // trailing days without samples stay null gaps. Values and target are on the 0 to 100 scale.
                             const target = report.target;
-                            const ebValues = report.recentMetrics.map(m => {
-                                const eb = (1.0 - target > 0) ? (m.value - target) / (1.0 - target) * 100 : 100.0;
+                            const sloValues = report.historicalSloValues || [];
+                            const today = new Date();
+                            const ebValues = sloValues.map(v => {
+                                if (v == null) return null;
+                                const eb = (100 - target > 0) ? (v - target) / (100 - target) * 100 : 100.0;
                                 return eb.toFixed(2);
-                            }).reverse();
-                            
+                            });
+                            const ebLabels = sloValues.map((_, i) => {
+                                const d = new Date(today);
+                                d.setDate(today.getDate() - (sloValues.length - 1 - i));
+                                return d.toLocaleDateString();
+                            });
+
                             series.push({
                                 name: 'Error Budget (%)',
                                 data: ebValues
                             });
-                            categories = timestamps;
+                            categories = ebLabels;
                             targetValue = 0; // Error budget target is 0% remaining (breach)
 
-                            // Add Trend Analysis if available (only for SLO chart)
-                            if (report.trendPoints && report.trendPoints.length > 0) {
-                                const trendData = new Array(ebValues.length - 1).fill(null);
-                                trendData.push(ebValues[ebValues.length - 1]); // Connect trend to last real point
+                            // Trend is shown only when the newest day has data, so its projection lines up with the chart's last day
+                            const n = ebValues.length;
+                            if (n > 0 && ebValues[n - 1] != null && report.trendPoints && report.trendPoints.length > 0) {
+                                const trendData = new Array(n - 1).fill(null);
+                                trendData.push(ebValues[n - 1]); // Connect trend to last real point
                                 report.trendPoints.forEach(p => trendData.push(p.toFixed(2)));
-                                
+
                                 series.push({
                                     name: '30-Day Trend',
                                     data: trendData
                                 });
-                                
-                                // Extend categories for trend
-                                const lastDate = new Date(report.recentMetrics[0].timestamp);
+
+                                // Extend categories for trend, starting after today
                                 for (let i = 1; i <= report.trendPoints.length; i++) {
-                                    const nextDate = new Date(lastDate);
-                                    nextDate.setDate(lastDate.getDate() + i);
+                                    const nextDate = new Date(today);
+                                    nextDate.setDate(today.getDate() + i);
                                     categories.push(nextDate.toLocaleDateString());
                                 }
                             }
                         } else {
-                            const sliValues = report.recentMetrics ? report.recentMetrics.map(m => (m.value * 100).toFixed(2)).reverse() : [];
+                            const sliValues = report.recentMetrics ? report.recentMetrics.map(m => m.value.toFixed(2)).reverse() : [];
                             series.push({
                                 name: 'SLI Value (%)',
                                 data: sliValues
                             });
                             categories = timestamps;
                             if (report.target !== undefined && report.target !== null) {
-                                targetValue = report.target * 100;
+                                targetValue = report.target;
                             }
                         }
                     } else {
-                        // Fallback data
-                        series = [{
-                            name: 'Remaining Budget',
-                            data: [100, 98, 97, 95, 94, 93, 91, 88, 85, 82, 80, 78, 75, 74]
-                        }];
-                        categories = Array.from({length: 14}, (_, i) => `Day ${i+1}`);
+                        // No data: show an empty chart, never made-up values
+                        series = [];
+                        categories = [];
                     }
 
                     let fillConfig = {
@@ -2755,7 +2687,8 @@ spec:
                             zoom: { enabled: true }
                         },
                         dataLabels: { enabled: false },
-                        stroke: { 
+                        noData: { text: 'No data' },
+                        stroke: {
                             curve: 'smooth', 
                             width: [3, 2],
                             dashArray: [0, 5] // Trend line is dashed
@@ -2824,30 +2757,6 @@ spec:
                     }
                 };
 
-                const runQuery = async () => {
-                    isQueryLoading.value = true;
-                    queryError.value = '';
-                    queryResults.value = [];
-                    try {
-                        const response = await fetch('/api/v1/database/query', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ sql: querySql.value }),
-                            credentials: 'same-origin'
-                        });
-                        const data = await response.json();
-                        if (response.ok) {
-                            queryResults.value = data;
-                        } else {
-                            queryError.value = data.message || 'Failed to execute query';
-                        }
-                    } catch (err) {
-                        queryError.value = 'An error occurred while executing the query';
-                    } finally {
-                        isQueryLoading.value = false;
-                    }
-                };
-
                 const fetchTables = () => {
                     fetch('/api/v1/database/tables', { credentials: 'same-origin' })
                         .then(res => res.json())
@@ -2861,8 +2770,6 @@ spec:
                         .then(res => res.json())
                         .then(data => {
                             selectedTableStructure.value = data;
-                            queryResults.value = [];
-                            queryError.value = '';
                         })
                         .catch(err => console.error('Failed to fetch table structure', err));
                 };
@@ -2911,6 +2818,7 @@ spec:
                     searchQuery,
                     filteredSlos,
                     healthyCount,
+                    noDataCount,
                     warningCount,
                     breachingCount,
                     isModalOpen,
@@ -2930,10 +2838,6 @@ spec:
                     selectedServiceReport,
                     selectedDs,
                     notification,
-                    querySql,
-                    queryResults,
-                    queryError,
-                    isQueryLoading,
                     dbTables,
                     selectedTableStructure,
                     selectedTableName,
@@ -2941,7 +2845,6 @@ spec:
                     alertingTemplates,
                     dataSourceTemplates,
                     applyTemplate,
-                    runQuery,
                     fetchTables,
                     viewTableStructure,
                     openCreateModal,

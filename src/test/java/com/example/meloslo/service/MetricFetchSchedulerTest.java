@@ -45,6 +45,68 @@ class MetricFetchSchedulerTest {
     void setUp() {
         MockitoAnnotations.openMocks(this);
         scheduler = new MetricFetchScheduler(openSloRepository, metricRepository, openSloService, alertingService, taskManagementService, restTemplate);
+        // Deterministic: no random simulated failures unless a test asks for them
+        ReflectionTestUtils.setField(scheduler, "simulatedFailureRate", 0.0);
+    }
+
+    private Runnable captureFetchTask(OpenSlo dataSource, long id) {
+        when(openSloRepository.findByKind("DataSource")).thenReturn(List.of(dataSource));
+        scheduler.fetchMetrics();
+        ArgumentCaptor<Runnable> captor = ArgumentCaptor.forClass(Runnable.class);
+        verify(taskManagementService).runAsyncTask(eq("Fetch-" + id), captor.capture());
+        return captor.getValue();
+    }
+
+    private OpenSlo dataSourceWithSli(long dsId, Long sliId) {
+        OpenSlo dataSource = new OpenSlo();
+        dataSource.setId(dsId);
+        dataSource.setKind("DataSource");
+        dataSource.setName("failing-ds");
+        dataSource.setRefreshRate(15);
+        OpenSlo sli = new OpenSlo();
+        sli.setId(sliId);
+        sli.setKind("SLI");
+        sli.setName("failing-sli");
+        dataSource.setIndicatorSlis(List.of(sli));
+        return dataSource;
+    }
+
+    @Test
+    void shouldNotStoreSampleWhenFetchFails() {
+        ReflectionTestUtils.setField(scheduler, "simulatedFailureRate", 1.0);
+        OpenSlo dataSource = dataSourceWithSli(20L, 5L);
+
+        captureFetchTask(dataSource, 20L).run();
+
+        verify(metricRepository, never()).save(any());
+        verify(openSloRepository).recordFetchFailure(eq(5L), any(LocalDateTime.class), contains("Mock connection error"));
+        // refresh time is still updated so a failing source does not retry immediately
+        verify(openSloRepository).save(dataSource);
+        assertNotNull(dataSource.getLastRefreshTime());
+    }
+
+    @Test
+    void shouldNotRecordFailureForSliWithoutId() {
+        ReflectionTestUtils.setField(scheduler, "simulatedFailureRate", 1.0);
+        OpenSlo dataSource = dataSourceWithSli(21L, null);
+
+        assertDoesNotThrow(() -> captureFetchTask(dataSource, 21L).run());
+
+        verify(metricRepository, never()).save(any());
+        verify(openSloRepository, never()).recordFetchFailure(any(), any(), any());
+    }
+
+    @Test
+    void shouldCopyLinkedSlisBeforeRunningAsyncTask() {
+        OpenSlo dataSource = dataSourceWithSli(22L, 6L);
+        List<OpenSlo> original = new java.util.ArrayList<>(dataSource.getIndicatorSlis());
+        Runnable task = captureFetchTask(dataSource, 22L);
+
+        // Replacing the (lazy) collection after scheduling must not affect the already scheduled task
+        dataSource.setIndicatorSlis(null);
+        task.run();
+
+        verify(metricRepository, times(original.size())).save(any(SliMetric.class));
     }
 
     @Test

@@ -14,6 +14,7 @@ import org.springframework.web.client.RestTemplate;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 
 @Service
@@ -30,6 +31,9 @@ public class MetricFetchScheduler {
 
     @Value("${app.datasource.mode:test}")
     private String datasourceMode;
+
+    @Value("${app.datasource.simulated-failure-rate:0.03}")
+    private double simulatedFailureRate = 0.03;
 
     @Autowired
     public MetricFetchScheduler(OpenSloRepository openSloRepository, 
@@ -73,10 +77,12 @@ public class MetricFetchScheduler {
             if (lastRefresh == null || lastRefresh.plusMinutes(refreshRate).isBefore(now)) {
                 String taskId = "Fetch-" + ds.getId();
                 final Integer finalRefreshRate = refreshRate;
+                // Load the lazy collection inside this transaction; the async worker runs after it closes
+                final List<OpenSlo> slis = ds.getIndicatorSlis() == null
+                        ? new ArrayList<>() : new ArrayList<>(ds.getIndicatorSlis());
                 taskManagementService.runAsyncTask(taskId, () -> {
                     log.info("Fetching metrics for DataSource: {} (Mode: {}, Refresh Rate: {}m)", ds.getName(), datasourceMode, finalRefreshRate);
-                    
-                    List<OpenSlo> slis = ds.getIndicatorSlis();
+
                     if (slis.isEmpty()) {
                         log.debug("No SLIs linked to DataSource: {}", ds.getName());
                     }
@@ -92,8 +98,13 @@ public class MetricFetchScheduler {
                             metricRepository.save(new SliMetric(LocalDateTime.now(), value, sli, ds));
                             log.debug("Fetched metric for SLI {}: {}", sli.getName(), value);
                         } catch (Exception e) {
-                            log.error("Failed to fetch metric for SLI {}: {}. Setting value to 0.", sli.getName(), e.getMessage());
-                            metricRepository.save(new SliMetric(LocalDateTime.now(), 0.0, sli, ds));
+                            // No fake sample: a failed fetch is recorded on the SLI instead
+                            log.error("Failed to fetch metric for SLI {}: {}. No sample stored.", sli.getName(), e.getMessage());
+                            if (sli.getId() != null) {
+                                String error = e.getClass().getSimpleName() + ": " + e.getMessage();
+                                if (error.length() > 500) error = error.substring(0, 500);
+                                openSloRepository.recordFetchFailure(sli.getId(), LocalDateTime.now(), error);
+                            }
                         }
                     }
                     
@@ -105,12 +116,12 @@ public class MetricFetchScheduler {
     }
 
     private double simulateFetch(OpenSlo ds, OpenSlo sli) {
-        // Mock failure randomly (3% chance)
-        if (Math.random() < 0.03) {
+        // Mock failure randomly (configurable, default 3% chance)
+        if (Math.random() < simulatedFailureRate) {
             throw new RuntimeException("Mock connection error for " + ds.getName());
         }
-        // Return a realistic health value (0.9 to 1.0)
-        return 0.9 + (Math.random() * 0.1);
+        // Return a realistic health value (90 to 100 percent)
+        return 90.0 + (Math.random() * 10.0);
     }
 
     private double liveFetch(OpenSlo ds, OpenSlo sli) {

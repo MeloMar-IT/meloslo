@@ -52,6 +52,8 @@ The system is built around four primary entities:
 | **🟢 Healthy** | Performance is within the target, and the error budget is largely intact. |
 | **🟡 Warning** | The error budget is being consumed at a rate that could lead to a breach. |
 | **🔴 Breaching** | The current performance has fallen below the target, or the error budget is exhausted. |
+| **⚪ No data** | The rolling window has no samples. The value and error budget are empty; they are never shown as 0% or 100%. |
+| **⚪ Unknown** | The stored SLO target is invalid. No error budget is calculated, and the SLO is not counted as breaching. |
 
 ---
 
@@ -66,7 +68,7 @@ The application features a sidebar providing access to:
 - **Services/SLOs/SLIs**: Management of OpenSLO records.
 - **Data/Alerting Sources**: Integration configurations.
 - **Reports**: Annual PDF performance reports.
-- **Administrative Tools**: User admin and SQL query tool (Admin only).
+- **Administrative Tools**: User admin and database table browser (Admin only).
 
 ### Managing SLO Records
 
@@ -76,14 +78,20 @@ The application features a sidebar providing access to:
 ### Access Control & Departments
 
 - **Administrator**: Full system access.
-- **Standard User**: Access limited to assigned departments. Users only see records matching their department (e.g., `Finance, Engineering`).
+- **Standard User**: Access limited to assigned departments. Users only see, create, update and delete records in their own departments (e.g., `Finance, Engineering`).
+- **No departments**: A standard user with no departments assigned sees no records (deny by default). Records without a department are visible to administrators only.
+- **Moving records**: Creating a record in, or moving one to, a department you are not in is refused with `403 Forbidden`. Records in other departments return `404 Not Found` on by-id, report, update and delete requests, and are left out of lists, dashboards and reports.
 
 ### Configuration Modes (Test vs Live)
 
 The system behavior is controlled by the `app.datasource.mode` configuration in `application.properties`:
 
-- **`test` (Default)**: Generates simulated metric data (0.9–1.0 range). Re-initializes the database with sample data if state is invalid. Ideal for local development.
-- **`live`**: Intended for connection to real external endpoints. Only basic system users are seeded, preserving any production-grade configuration.
+- **`test` (Default)**: Generates simulated metric data (values from 90 to 100). Seeds sample data only into an empty database and never deletes existing data. Set `app.seed=true` to add missing demo records. Seeds the demo accounts `admin/admin` and `testuser/testuser`. Ideal for local development only.
+- **`live`**: Intended for connection to real external endpoints. Creates only the `admin` user, and only if missing. Its password comes from `APP_ADMIN_INITIAL_PASSWORD`, or is a random value logged once at WARN level. No `testuser` is created.
+
+### H2 Console
+
+The H2 console at `/h2-console` is off by default. It is enabled only under the `dev` profile, and then requires the ADMIN role. In the default and `prod` profiles it returns 404.
 
 ---
 
@@ -114,13 +122,13 @@ The API uses standard HTTP Basic Authentication or session-based cookies. Ensure
 | | `/users` | `GET` | List all users (Admin only). |
 | | `/users` | `POST` | Create a new user (Admin only). |
 | **Database** | `/database/tables` | `GET` | List all internal database tables (Admin only). |
-| | `/database/query` | `POST` | Execute a raw SQL `SELECT` query (Admin only). |
+| | `/database/tables/{tableName}/structure` | `GET` | Show the columns of one table (Admin only). |
 
 ### Example Request (Creating an SLI)
 
 ```bash
 curl -X POST http://localhost:8080/api/v1/openslo \
-     -u admin:admin \
+     -u admin:<admin-password> \
      -H "Content-Type: application/json" \
      -d '{
        "apiVersion": "openslo/v1",
@@ -148,8 +156,10 @@ Stores all OpenSLO-related entities (Services, SLIs, SLOs, Sources).
 | `DISPLAY_NAME` | `VARCHAR` | Human-readable label. |
 | `SPEC` | `VARCHAR` | YAML/JSON specification details. |
 | `DEPARTMENT` | `VARCHAR` | Assigned department for access control. |
-| `STATUS` | `VARCHAR` | Current health status (Healthy, Warning, Breaching). |
+| `STATUS` | `VARCHAR` | Current health status (Healthy, Warning, Breaching, No data). |
 | `ERROR_BUDGET` | `DOUBLE` | Remaining error budget percentage. |
+| `LAST_FETCH_FAILURE_TIME` | `TIMESTAMP` | Time of the last failed metric fetch for this SLI (nullable). |
+| `LAST_FETCH_ERROR` | `VARCHAR(500)` | Error message of the last failed metric fetch for this SLI (nullable). |
 
 ### 2. `SLI_METRIC` (Performance Data)
 Stores historical metric data points collected for SLIs.
@@ -195,9 +205,12 @@ The `MetricFetchScheduler` component runs every **15 minutes** and performs the 
 2.  **Asynchronous Execution**: If an update is due, it spawns an asynchronous task via the `TaskManagementService`.
 3.  **Fetch Process**:
     -   It identifies all **SLIs** linked to that specific DataSource.
-    -   It "fetches" the current value for each SLI (currently using a simulation that generates values between 0.9 and 1.0, representing high reliability).
+    -   It "fetches" the current value for each SLI (currently using a simulation that generates values between 90 and 100, representing high reliability).
     -   In a production environment, this would involve executing queries against the external system's API (e.g., a PromQL query for Prometheus).
+    -   The simulated fetch fails randomly with a probability set by `app.datasource.simulated-failure-rate` (default `0.03`). Set it to `0` to turn failures off.
 4.  **Persistence**: The fetched values are normalized (0-100) and stored in the `SLI_METRIC` table with a current timestamp.
+    -   If a fetch fails, **no sample is stored**. The failure time and error message are recorded on the SLI (`last_fetch_failure_time` and `last_fetch_error`) and the error is logged. A failed fetch is never stored as `0.0`.
+    -   An SLI that stops reporting shows **No data** once its samples leave the rolling window; it does not stay Healthy.
 5.  **Immediate Evaluation**: After metrics are saved, the system immediately checks all **SLOs** linked to those SLIs for potential breaches and triggers alerts if necessary.
 
 ### Linking SLIs to DataSources
@@ -254,7 +267,7 @@ MeloSlo provides a **30-day forecast**. If the projected line crosses the 0% thr
     mvn clean install
     ```
 2.  **Run**: `mvn spring-boot:run`
-3.  **Access**: `http://localhost:8080` (Default: `admin` / `admin`)
+3.  **Access**: `http://localhost:8080` (Test mode default: `admin` / `admin`. In live mode, use the password from `APP_ADMIN_INITIAL_PASSWORD` or the one logged at startup.)
 
 ### GitFlow Workflow
 
