@@ -18,6 +18,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 @SpringBootTest
 @AutoConfigureMockMvc
+@org.springframework.context.annotation.Import(CsrfTestConfig.class)
 public class SecurityIntegrationTest {
 
     @Autowired

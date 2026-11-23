@@ -22,6 +22,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 @SpringBootTest
 @AutoConfigureMockMvc
+@org.springframework.context.annotation.Import(com.example.meloslo.CsrfTestConfig.class)
 @WithMockUser(username = "admin", roles = "ADMIN")
 public class OpenSloControllerTest {
 
@@ -362,5 +363,88 @@ public class OpenSloControllerTest {
                 .andExpect(jsonPath("$.name").value("SliReportTest"))
                 .andExpect(jsonPath("$.currentValue").value(98.0))
                 .andExpect(jsonPath("$.recentMetrics", hasSize(1)));
+    }
+
+    private String sourceBody(String name, String url) {
+        return "{\"apiVersion\":\"openslo/v1\",\"kind\":\"AlertingSource\",\"name\":\"" + name
+                + "\",\"displayName\":\"" + name + "\",\"spec\":\"{}\",\"alertUrl\":\"" + url + "\"}";
+    }
+
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(strings = {
+            "http://127.0.0.1/hook", "http://10.0.0.5/hook", "http://169.254.169.254/hook",
+            "http://[::1]/hook", "http://192.0.2.1/hook", "ftp://example.invalid/hook"})
+    void createAndUpdateRefuseUnsafeAlertUrls(String url) throws Exception {
+        OpenSlo existing = saveRecord("AlertingSource", "safe-source");
+        existing.setAlertUrl("https://93.184.216.34/safe");
+        existing = repository.save(existing);
+        long countBefore = repository.count();
+
+        mockMvc.perform(post("/api/v1/openslo").contentType(MediaType.APPLICATION_JSON)
+                        .content(sourceBody("new-source", url)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").isNotEmpty());
+        org.assertj.core.api.Assertions.assertThat(repository.count()).isEqualTo(countBefore);
+
+        mockMvc.perform(put("/api/v1/openslo/" + existing.getId()).contentType(MediaType.APPLICATION_JSON)
+                        .content(sourceBody("safe-source", url)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").isNotEmpty());
+        org.assertj.core.api.Assertions.assertThat(repository.findById(existing.getId()).orElseThrow().getAlertUrl())
+                .isEqualTo("https://93.184.216.34/safe");
+    }
+
+    @Test
+    void maskedUrlOfAnotherHostIsRefusedOnUpdate() throws Exception {
+        OpenSlo existing = saveRecord("AlertingSource", "masked-other");
+        existing.setAlertUrl("https://93.184.216.34/safe");
+        existing = repository.save(existing);
+
+        mockMvc.perform(put("/api/v1/openslo/" + existing.getId()).contentType(MediaType.APPLICATION_JSON)
+                        .content(sourceBody("masked-other", "https://93.184.216.35/****")))
+                .andExpect(status().isBadRequest());
+        org.assertj.core.api.Assertions.assertThat(repository.findById(existing.getId()).orElseThrow().getAlertUrl())
+                .isEqualTo("https://93.184.216.34/safe");
+    }
+
+    @Test
+    void alertUrlIsMaskedInResponsesAndMaskedPutKeepsTheStoredUrl() throws Exception {
+        mockMvc.perform(post("/api/v1/openslo").contentType(MediaType.APPLICATION_JSON)
+                        .content(sourceBody("public-source", "https://93.184.216.34/hook")))
+                .andExpect(status().isCreated());
+        OpenSlo stored = repository.findByName("public-source").orElseThrow();
+
+        mockMvc.perform(get("/api/v1/openslo/" + stored.getId()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.alertUrl").value("https://93.184.216.34/****"));
+
+        mockMvc.perform(put("/api/v1/openslo/" + stored.getId()).contentType(MediaType.APPLICATION_JSON)
+                        .content(sourceBody("public-source", "https://93.184.216.34/****")))
+                .andExpect(status().isOk());
+        org.assertj.core.api.Assertions.assertThat(repository.findById(stored.getId()).orElseThrow().getAlertUrl())
+                .isEqualTo("https://93.184.216.34/hook");
+    }
+
+    @Test
+    void nestedAlertingSourceIsMaskedAndSloUpdateKeepsItsStoredUrl() throws Exception {
+        OpenSlo source = saveRecord("AlertingSource", "nested-source");
+        source.setAlertUrl("https://93.184.216.34/secret");
+        source = repository.save(source);
+        OpenSlo slo = saveRecord("SLO", "nested-slo");
+        slo.setAlertingSource(source);
+        slo = repository.save(slo);
+
+        mockMvc.perform(get("/api/v1/openslo/" + slo.getId()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.alertingSource.alertUrl").value("https://93.184.216.34/****"));
+
+        String body = "{\"apiVersion\":\"openslo/v1\",\"kind\":\"SLO\",\"name\":\"nested-slo\","
+                + "\"displayName\":\"nested-slo display\",\"spec\":\"{}\",\"alertingSource\":{\"id\":"
+                + source.getId() + ",\"alertUrl\":\"https://93.184.216.34/****\"}}";
+        mockMvc.perform(put("/api/v1/openslo/" + slo.getId()).contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isOk());
+
+        org.assertj.core.api.Assertions.assertThat(repository.findById(source.getId()).orElseThrow().getAlertUrl())
+                .isEqualTo("https://93.184.216.34/secret");
     }
 }

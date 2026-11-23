@@ -25,7 +25,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 @WebMvcTest(ReportController.class)
-@Import(SecurityConfig.class)
+@Import({SecurityConfig.class, com.example.meloslo.CsrfTestConfig.class})
 class ReportControllerUnitTest {
 
     @Autowired

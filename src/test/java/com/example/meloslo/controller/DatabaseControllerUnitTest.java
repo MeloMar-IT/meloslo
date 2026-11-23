@@ -29,7 +29,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 @WebMvcTest(DatabaseController.class)
-@Import(SecurityConfig.class)
+@Import({SecurityConfig.class, com.example.meloslo.CsrfTestConfig.class})
 @WithMockUser(roles = "ADMIN")
 public class DatabaseControllerUnitTest {
 

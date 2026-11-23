@@ -9,6 +9,7 @@ import com.example.meloslo.model.OpenSlo;
 import com.example.meloslo.repository.MetricRepository;
 import com.example.meloslo.repository.OpenSloRepository;
 import com.example.meloslo.service.DepartmentAccessService.AccessScope;
+import com.example.meloslo.util.MaskedUrlSerializer;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
@@ -35,11 +36,14 @@ public class OpenSloService {
     private final MetricRepository metricRepository;
     private final DepartmentAccessService accessService;
     private final OpenSloRedactor redactor;
+    private final AlertUrlValidator alertUrlValidator;
     private final ObjectMapper yamlMapper = new ObjectMapper(new YAMLFactory());
 
     @Autowired
     public OpenSloService(OpenSloRepository repository, MetricRepository metricRepository,
-                          DepartmentAccessService accessService, OpenSloRedactor redactor) {
+                          DepartmentAccessService accessService, OpenSloRedactor redactor,
+                          AlertUrlValidator alertUrlValidator) {
+        this.alertUrlValidator = alertUrlValidator;
         this.repository = repository;
         this.metricRepository = metricRepository;
         this.accessService = accessService;
@@ -200,6 +204,7 @@ public class OpenSloService {
     @Transactional
     public OpenSlo createRecord(OpenSlo record) {
         validateSloTarget(record);
+        alertUrlValidator.validate(record.getAlertUrl());
         if (record.getId() != null) {
             throw new BadRequestException("A new record must not have an id");
         }
@@ -311,6 +316,13 @@ public class OpenSloService {
             throw new AccessDeniedException("You can only assign records to your own departments");
         }
         assertNameUnique(updatedRecord.getName(), record.getId());
+        // An alert URL that equals the mask of the stored one means "unchanged"
+        String incomingAlertUrl = updatedRecord.getAlertUrl();
+        boolean keepAlertUrl = incomingAlertUrl != null && record.getAlertUrl() != null
+                && incomingAlertUrl.equals(MaskedUrlSerializer.mask(record.getAlertUrl()));
+        if (!keepAlertUrl) {
+            alertUrlValidator.validate(incomingAlertUrl);
+        }
         record.setApiVersion(updatedRecord.getApiVersion());
         record.setKind(updatedRecord.getKind());
         record.setName(updatedRecord.getName());
@@ -319,7 +331,7 @@ public class OpenSloService {
         record.setDepartment(updatedRecord.getDepartment());
         record.setManager(updatedRecord.getManager());
         record.setRefreshRate(updatedRecord.getRefreshRate());
-        record.setAlertUrl(updatedRecord.getAlertUrl());
+        record.setAlertUrl(keepAlertUrl ? record.getAlertUrl() : incomingAlertUrl);
         record.setAlertPayload(updatedRecord.getAlertPayload());
         record.setAlertingSource(updatedRecord.getAlertingSource());
         record.setService(updatedRecord.getService());

@@ -1432,7 +1432,11 @@ spec:
                         <div v-if="form.kind === 'AlertingSource'" class="col-span-2">
                             <label class="block text-sm font-bold text-slate-700 mb-1">Alert URL (Webhook)</label>
                             <p class="text-[10px] text-slate-500 mb-2">The endpoint URL where the alert payload will be sent (POST).</p>
-                            <input type="url" v-model="form.alertUrl" placeholder="https://hooks.slack.com/services/..." class="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none text-sm">
+                            <div v-if="isEditing && isMaskedUrl(form.alertUrl) && !replaceAlertUrl" class="flex items-center gap-3">
+                                <span class="flex-1 px-4 py-2 bg-slate-100 border border-slate-200 rounded-lg text-sm text-slate-600 truncate">{{ form.alertUrl }}</span>
+                                <button type="button" @click="replaceAlertUrl = true; form.alertUrl = ''" class="px-3 py-2 text-sm font-semibold text-blue-600 hover:text-blue-800">Replace URL</button>
+                            </div>
+                            <input v-else type="url" v-model="form.alertUrl" placeholder="https://hooks.example.test/..." class="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none text-sm">
                         </div>
                         <div v-if="form.kind === 'AlertingSource'" class="col-span-2">
                             <label class="block text-sm font-bold text-slate-700 mb-1">Alert Payload Template (JSON)</label>
@@ -2101,6 +2105,7 @@ spec:
                     }
                 };
 
+                const replaceAlertUrl = ref(false);
                 const form = ref({
                     id: null,
                     name: '',
@@ -2207,9 +2212,9 @@ spec:
                         console.log('[DEBUG_LOG] Posting to /api/login...');
                         const response = await fetch('/api/login', {
                             method: 'POST',
-                            headers: {
+                            headers: withCsrf({
                                 'Content-Type': 'application/x-www-form-urlencoded'
-                            },
+                            }),
                             body: params,
                             credentials: 'same-origin'
                         });
@@ -2242,8 +2247,9 @@ spec:
                 const handleLogout = async () => {
                     console.log('[DEBUG_LOG] Logging out...');
                     try {
-                        const response = await fetch('/api/logout', { 
+                        const response = await fetch('/api/logout', {
                             method: 'POST',
+                            headers: withCsrf(),
                             credentials: 'same-origin'
                         });
                         if (response.ok) {
@@ -2262,7 +2268,7 @@ spec:
                     try {
                         const response = await fetch('/api/v1/users/me/password', {
                             method: 'PUT',
-                            headers: { 'Content-Type': 'application/json' },
+                            headers: withCsrf({ 'Content-Type': 'application/json' }),
                             body: JSON.stringify(passwordForm.value),
                             credentials: 'same-origin'
                         });
@@ -2312,7 +2318,7 @@ spec:
                     try {
                         const response = await fetch(url, {
                             method: method,
-                            headers: { 'Content-Type': 'application/json' },
+                            headers: withCsrf({ 'Content-Type': 'application/json' }),
                             body: JSON.stringify(userForm.value),
                             credentials: 'same-origin'
                         });
@@ -2333,8 +2339,9 @@ spec:
                 const deleteUser = async (id) => {
                     if (!confirm('Are you sure you want to delete this user?')) return;
                     try {
-                        const response = await fetch(`/api/v1/users/${id}`, { 
+                        const response = await fetch(`/api/v1/users/${id}`, {
                             method: 'DELETE',
+                            headers: withCsrf(),
                             credentials: 'same-origin'
                         });
                         if (response.ok) {
@@ -2395,9 +2402,9 @@ spec:
                     try {
                         const response = await fetch('/api/v1/reports/pdf', {
                             method: 'POST',
-                            headers: {
+                            headers: withCsrf({
                                 'Content-Type': 'application/json'
-                            },
+                            }),
                             body: JSON.stringify({
                                 ids: selectedReportRecords.value,
                                 ...reportOptions.value
@@ -2446,6 +2453,7 @@ spec:
                 const openCreateModal = (kind = 'SLO') => {
                     isEditing.value = false;
                     selectedTemplate.value = '';
+                    replaceAlertUrl.value = false;
                     form.value = {
                         id: null,
                         name: '',
@@ -2471,7 +2479,8 @@ spec:
                 const openEditModal = (record) => {
                     isEditing.value = true;
                     selectedTemplate.value = '';
-                    form.value = { 
+                    replaceAlertUrl.value = false;
+                    form.value = {
                         ...record,
                         slis: record.slis ? record.slis.map(s => ({ id: s.id })) : [],
                         slos: record.slos ? record.slos.map(s => ({ id: s.id })) : [],
@@ -2493,7 +2502,7 @@ spec:
                     try {
                         const response = await fetch(url, {
                             method,
-                            headers: { 'Content-Type': 'application/json' },
+                            headers: withCsrf({ 'Content-Type': 'application/json' }),
                             body: JSON.stringify(form.value),
                             credentials: 'same-origin'
                         });
@@ -2514,8 +2523,9 @@ spec:
                     if (!confirm('Are you sure you want to delete this record?')) return;
 
                     try {
-                        const response = await fetch(`/api/v1/openslo/${id}`, { 
+                        const response = await fetch(`/api/v1/openslo/${id}`, {
                             method: 'DELETE',
+                            headers: withCsrf(),
                             credentials: 'same-origin'
                         });
                         if (response.ok) {
@@ -2605,6 +2615,15 @@ spec:
                     if (status === 'Warning') return 'text-yellow-600';
                     return 'text-red-600';
                 };
+
+                // Adds the CSRF token (from the XSRF-TOKEN cookie) to the headers of non-GET requests
+                const withCsrf = (h = {}) => {
+                    const m = document.cookie.match(/(?:^|;\s*)XSRF-TOKEN=([^;]+)/);
+                    return m ? { ...h, 'X-XSRF-TOKEN': decodeURIComponent(m[1]) } : h;
+                };
+
+                // The server shows alert URLs masked ("https://host/****" or "****")
+                const isMaskedUrl = (v) => v === '****' || (typeof v === 'string' && v.endsWith('/****'));
 
                 const readError = async (response, fallback) => {
                     try {
@@ -2886,6 +2905,8 @@ spec:
                     warningCount,
                     breachingCount,
                     isModalOpen,
+                    replaceAlertUrl,
+                    isMaskedUrl,
                     isDsModalOpen,
                     isApiModalOpen,
                     selectedApi,

@@ -36,7 +36,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 @WebMvcTest(OpenSloController.class)
-@Import(SecurityConfig.class)
+@Import({SecurityConfig.class, com.example.meloslo.CsrfTestConfig.class})
 @WithMockUser
 public class OpenSloControllerUnitTest {
 

@@ -44,6 +44,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  */
 @SpringBootTest
 @AutoConfigureMockMvc
+@org.springframework.context.annotation.Import(CsrfTestConfig.class)
 class DepartmentScopingIntegrationTest {
 
     private static final String BASE = "/api/v1/openslo";

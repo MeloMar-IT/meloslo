@@ -7,6 +7,8 @@ import com.example.meloslo.model.User;
 import com.example.meloslo.repository.MetricRepository;
 import com.example.meloslo.repository.OpenSloRepository;
 import com.example.meloslo.repository.UserRepository;
+import com.example.meloslo.util.EncryptionUtils;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.springframework.beans.factory.support.BeanDefinitionRegistry;
@@ -36,12 +38,20 @@ class DataInitializerRestartTest {
     @TempDir
     Path dir;
 
+    @AfterEach
+    void restoreDefaultKey() {
+        // The key state is static and shared by the whole JVM
+        EncryptionUtils.configure("", "", false);
+    }
+
     private ConfigurableApplicationContext start(String... extraArgs) {
         String url = "jdbc:h2:file:" + dir.resolve("db").toAbsolutePath();
         List<String> args = new ArrayList<>(List.of(
             "--spring.datasource.url=" + url,
             "--server.port=0",
-            "--app.datasource.mode=test"));
+            "--app.datasource.mode=test",
+            // A persistent datasource requires a key; the same one on every restart
+            "--app.encryption.key=restart-test-key"));
         args.addAll(List.of(extraArgs));
         ConfigurableApplicationContext ctx = new SpringApplicationBuilder(MeloSloApplication.class)
             // Keep the real initializer and database, but do not run the metric fetch scheduler.

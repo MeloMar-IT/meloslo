@@ -24,7 +24,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @WebMvcTest(MetricController.class)
-@Import(SecurityConfig.class)
+@Import({SecurityConfig.class, com.example.meloslo.CsrfTestConfig.class})
 class MetricControllerUnitTest {
 
     @Autowired
