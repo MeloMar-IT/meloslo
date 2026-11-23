@@ -1,17 +1,26 @@
 package com.example.meloslo.dto;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
+import jakarta.validation.constraints.AssertTrue;
+import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.NotEmpty;
+import jakarta.validation.constraints.NotNull;
+
 import java.util.List;
 
 public class ReportOptionsDTO {
-    private List<Long> ids;
+    @NotEmpty(message = "ids must contain at least one record id")
+    private List<@NotNull(message = "ids must not contain null") Long> ids;
     private boolean includeBusinessServiceAggregatedChart = true;
     private boolean includeSloDetails = true; // Overall toggle for details section
     private boolean includeSloCharts = true;
     private boolean includeMetadata = true; // System ID, Dept, Manager
     
     // Time period options
+    @Min(value = 1, message = "timeValue must be at least 1")
     private int timeValue = 1;
-    private String timeUnit = "YEARS"; // YEARS, MONTHS, DAYS
+    @NotNull(message = "timeUnit is required (DAYS, MONTHS or YEARS)")
+    private ReportTimeUnit timeUnit;
 
     // More granular options for SLO Details
     private boolean includeTarget = true;
@@ -72,12 +81,19 @@ public class ReportOptionsDTO {
         this.timeValue = timeValue;
     }
 
-    public String getTimeUnit() {
+    public ReportTimeUnit getTimeUnit() {
         return timeUnit;
     }
 
-    public void setTimeUnit(String timeUnit) {
+    public void setTimeUnit(ReportTimeUnit timeUnit) {
         this.timeUnit = timeUnit;
+    }
+
+    /** True when the period is at most 10 years; a missing unit is reported by {@code @NotNull}. */
+    @JsonIgnore
+    @AssertTrue(message = "the reporting period may be at most 10 years (3650 days, 120 months or 10 years)")
+    public boolean isPeriodWithinLimit() {
+        return timeUnit == null || timeValue <= timeUnit.maxValue();
     }
 
     public boolean isIncludeTarget() {

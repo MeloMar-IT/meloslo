@@ -1,6 +1,8 @@
 package com.example.meloslo.model;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.databind.annotation.JsonSerialize;
+import com.example.meloslo.util.MaskedUrlSerializer;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
@@ -58,6 +60,7 @@ public class OpenSlo {
     private LocalDateTime lastRefreshTime;
 
     @Convert(converter = EncryptionConverter.class)
+    @JsonSerialize(using = MaskedUrlSerializer.class)
     private String alertUrl;
 
     @Column(columnDefinition = "TEXT")

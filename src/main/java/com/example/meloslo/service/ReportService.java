@@ -1,6 +1,7 @@
 package com.example.meloslo.service;
 
 import com.example.meloslo.dto.ReportOptionsDTO;
+import com.example.meloslo.dto.ReportTimeUnit;
 import com.example.meloslo.model.OpenSlo;
 import com.example.meloslo.model.SliMetric;
 import com.example.meloslo.repository.MetricRepository;
@@ -42,6 +43,7 @@ import java.util.ArrayList;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.TreeMap;
 import java.util.stream.Collectors;
@@ -137,7 +139,8 @@ public class ReportService {
             document.add(dateInfo);
 
             // getRecordById applies the department check and returns only what the caller may see
-            for (Long id : options.getIds()) {
+            List<Long> ids = options.getIds() == null ? List.<Long>of() : options.getIds();
+            for (Long id : ids) {
                 openSloService.getRecordById(id).ifPresent(record -> {
                     try {
                         addRecordToPdf(document, record, since, now, subTitleFont, boldFont, normalFont, options);
@@ -158,13 +161,16 @@ public class ReportService {
 
     private LocalDateTime calculateSinceDate(LocalDateTime now, ReportOptionsDTO options) {
         int val = options.getTimeValue();
-        String unit = options.getTimeUnit() != null ? options.getTimeUnit().toUpperCase() : "YEARS";
-        
-        return switch (unit) {
-            case "DAYS" -> now.minusDays(val);
-            case "MONTHS" -> now.minusMonths(val);
-            default -> now.minusYears(val);
+        return switch (unitOf(options)) {
+            case DAYS -> now.minusDays(val);
+            case MONTHS -> now.minusMonths(val);
+            case YEARS -> now.minusYears(val);
         };
+    }
+
+    /** The report unit, defaulting to YEARS for callers that skip request validation. */
+    private static ReportTimeUnit unitOf(ReportOptionsDTO options) {
+        return options.getTimeUnit() != null ? options.getTimeUnit() : ReportTimeUnit.YEARS;
     }
 
     private void addRecordToPdf(Document document, OpenSlo record, LocalDateTime since, LocalDateTime now,
@@ -196,7 +202,7 @@ public class ReportService {
                         }
                     }
 
-                    String timeLabel = options.getTimeValue() + " " + options.getTimeUnit().toLowerCase();
+                    String timeLabel = options.getTimeValue() + " " + unitOf(options).name().toLowerCase(Locale.ROOT);
                     document.add(new Paragraph("Business Service Performance Aggregation (" + timeLabel + ")", boldFont));
                     ChronoUnit aggUnit = calculateChronoUnit(since, now);
                     Map<LocalDateTime, Double> aggregatedData = SloMath.bucketAverages(allServiceMetrics, since, now, ldt -> truncateTo(ldt, aggUnit), aggUnit);
@@ -274,7 +280,7 @@ public class ReportService {
             }
 
             if (options.isIncludeAvgPerformance()) {
-                String timeLabel = options.getTimeValue() + " " + options.getTimeUnit().toLowerCase();
+                String timeLabel = options.getTimeValue() + " " + unitOf(options).name().toLowerCase(Locale.ROOT);
                 table.addCell("Average Performance (" + timeLabel + ")");
                 table.addCell(avgValue == null ? SloMath.NO_DATA : String.format("%.4f%%", avgValue));
             }

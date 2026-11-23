@@ -120,6 +120,10 @@ Use pre-defined templates to quickly configure connection details for various pr
 ### 4.2 Alerting Sources
 Configure notification channels like Slack webhooks or PagerDuty to receive alerts when SLOs are breached.
 
+- **The URL is shown masked.** After saving, the alert URL appears as the scheme and host followed by `/****` (for example `https://hooks.example.test/****`). The secret part of the path is never shown again.
+- **Changing the URL.** Click **Replace URL** and type the full new URL. Leaving the masked value in place keeps the stored URL.
+- **Private and internal addresses are refused.** URLs that point to `localhost`, private networks, link-local or metadata addresses are rejected with a message. Only `http` and `https` URLs are accepted. Your administrator may also limit the allowed hosts.
+
 ![Alerting Sources](Screenshots/Screenshot%202026-04-06%20at%2008.43.47.png)
 
 ---

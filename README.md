@@ -58,6 +58,24 @@ MeloSlo includes a secure login system and administrative tools to manage users 
   - **Live mode (`live`)**: No fixed password. The password is taken from `APP_ADMIN_INITIAL_PASSWORD` (property `app.admin.initial-password`). If that is not set, a random 24-character password is generated and logged once at WARN level on first startup. Copy it from the log and change it after the first login.
 - **Test User**: Username: `testuser`, Password: `testuser` (Role `USER`, restricted to 'Finance' and 'Engineering' departments). Only seeded in test mode. Live mode never creates this account.
 
+### API Clients and CSRF
+
+Session-based requests that change data (`POST`, `PUT`, `DELETE`) must send a CSRF token.
+
+- After login, or on any `GET /api/v1/users/me`, the server sets an `XSRF-TOKEN` cookie.
+- Send the cookie value in an `X-XSRF-TOKEN` header with each state-changing request. Without it the response is `403 Forbidden`.
+- Login (`POST /api/login`) and logout (`POST /api/logout`) always need a token, and each sets a new one.
+- Clients that use HTTP Basic and send no session cookie are exempt from the token. A request that carries a session is never exempt.
+
+### Encryption Key
+
+Sensitive fields (SLO specs, alert URLs and alert payloads) are encrypted with AES-GCM. The key is read from `APP_ENCRYPTION_KEY`. It is never stored in the repository.
+
+- Generate a key with `openssl rand -base64 24`. This gives a 32-character value, a valid 32-byte key.
+- The key must be 16, 24 or 32 bytes. Keep it in your secret store and supply it as an environment variable.
+- It is **required** in `prod` and for any database that is not in-memory (`jdbc:h2:mem:`). The application refuses to start without it, and the error names `APP_ENCRYPTION_KEY`.
+- In the in-memory test database a random key is used for that run only. Data encrypted with it cannot be read after a restart.
+
 ### H2 Console
 
 The H2 database console (`/h2-console`) is **off by default**.
@@ -96,6 +114,38 @@ app.datasource.mode=live
 ### DTAP Environments and Configuration
 
 MeloSlo supports different configuration files for Development, Testing, Acceptance, and Production (DTAP) environments using Spring Boot's profile mechanism.
+
+#### Environment Variables
+
+| Variable | Purpose |
+|----------|---------|
+| `APP_ENCRYPTION_KEY` | Current encryption key (16, 24 or 32 bytes). Required in `prod` and for any persistent database. |
+| `APP_ENCRYPTION_LEGACY_KEYS` | Comma-separated old keys. They are used only to decrypt existing data. |
+| `APP_ENCRYPTION_REENCRYPT` | `true` re-encrypts stored data under `APP_ENCRYPTION_KEY` at startup. Default `false`. |
+| `APP_ALERTING_ALLOWED_HOSTS` | Comma-separated hosts that alert URLs may use (exact host or subdomain). Empty allows any public host. |
+| `APP_ADMIN_INITIAL_PASSWORD` | Initial password of `admin` in live mode. |
+
+Settings in `application-prod.properties`:
+- `app.encryption.require-key=true`: startup fails without `APP_ENCRYPTION_KEY`.
+- SQL and bound-parameter logging is off, and Spring Security logs at INFO. SQL and DEBUG logging are enabled only in `dev`.
+
+**Production checklist**
+- Set `APP_ENCRYPTION_KEY` from your secret store.
+- Set `APP_ALERTING_ALLOWED_HOSTS` to the webhook hosts you use. The allow-list is empty, and therefore open, by default.
+- Restrict outbound traffic from the application host to non-private address ranges. The application checks alert addresses when they are saved and again before each send, but it does not prevent DNS rebinding (a host name that changes its address between the check and the send). Egress firewall rules close that gap, so they are a deployment requirement.
+
+#### Migrating the Encryption Key
+
+Use this when an existing database was encrypted with the key that was committed to the repository. That key is compromised and must be rotated.
+
+1. Generate a new key and set `APP_ENCRYPTION_KEY` to it.
+2. Set `APP_ENCRYPTION_LEGACY_KEYS=ThisIsASecretK16` so the old data can still be read.
+3. Start the application once with `APP_ENCRYPTION_REENCRYPT=true`. Every record is rewritten under the new key. Values that no configured key can decrypt are left unchanged and counted in a WARN log line.
+4. Check that the records load correctly in the UI and the API.
+5. Restart with `APP_ENCRYPTION_REENCRYPT` removed or set to `false`.
+6. Keep the legacy key until step 4 is verified. Once verified, remove `APP_ENCRYPTION_LEGACY_KEYS`.
+
+Without the legacy key, old data cannot be decrypted. It is returned as the raw ciphertext, and saving that record again would encrypt the ciphertext, so the data would be lost.
 
 #### Using Profiles
 
@@ -156,7 +206,7 @@ When creating or editing a record, you will be presented with several options:
 ### Relationships
 
 - **SLOs** can be linked to one **Service** and one or more **SLIs**. Linking multiple SLIs to a single SLO allows for a consolidated reliability view across multiple metrics.
-- **Services** can be linked to multiple **SLOs**.
+- **Services** can be linked to multiple **SLOs**. The link is set from the Business Service: its `slos` list is the full set of SLOs for that service, and saving replaces the list. An SLO belongs to one service, so linking it to another Business Service moves it. Only SLOs you can see are changed.
 - **SLIs** are linked to a **DataSource** which defines where their metrics are fetched from.
 - **AlertingSources** can be linked to multiple **SLOs** to receive breach notifications.
 
@@ -200,6 +250,8 @@ MeloSlo supports automated alerting when an SLO enters the **Breaching** status.
 - **Association**: Each SLO can be linked to one `AlertingSource`.
 - **Trigger**: When the background scheduler fetches metrics and detects that a linked SLO is breaching, it sends a POST request to the configured webhook URL.
 - **Spam Prevention**: To prevent excessive notifications, MeloSlo will only send an alert once every hour for a specific SLO while it remains in a breaching state.
+- **URL checks**: An alert URL must use `http` or `https` and must not point to a loopback, private, link-local, carrier-grade NAT or other internal address, including IPv6 and IPv4-mapped forms. The check runs when the record is saved and again before each send. Set `APP_ALERTING_ALLOWED_HOSTS` to restrict the hosts (see [Environment Variables](#environment-variables)).
+- **Masked URLs**: API responses and the UI show the alert URL as `https://hooks.example.test/****`. Only the scheme and host are visible. To change the URL, enter the full new value. Sending the masked value back keeps the stored URL.
 
 ## OpenSLO Examples
 
@@ -349,7 +401,7 @@ MeloSlo supports storing actual performance metrics and calculating SLOs and Err
 
 MeloSlo allows you to generate professional PDF reports for your Services and SLOs.
 
-- **Time Period**: Reports always cover the performance over the last 365 days.
+- **Time Period**: Choose the period as a value and a unit (days, months or years). The default is 1 year. The period may be at most 10 years (3650 days, 120 months or 10 years). See the [Reports API](#reports-api-apiv1reports).
 - **Selection**: You can select one or more Services or SLOs to include in a single PDF report. Selected records outside your departments are skipped silently, and a Service only lists the child SLOs you can see.
 - **Content**: Each report includes:
   - Average performance (SLO value) over the last year.
@@ -421,6 +473,8 @@ spec:
 
 The MeloSlo API is accessible under the `/api/v1` base path.
 
+Errors are JSON objects with `status`, `error` and `message`, for example `{"status": 409, "error": "Conflict", "message": "A record named 'x' already exists"}`. `400` covers invalid input, `404` a missing or hidden record, and `409` a duplicate name or a record that is still in use. A database constraint violation is reported as `409` with a fixed message; SQL text is never returned.
+
 ### OpenSLO Records (`/api/v1/openslo`)
 
 Manage Services, SLIs, SLOs, and DataSources.
@@ -434,12 +488,13 @@ Manage Services, SLIs, SLOs, and DataSources.
   - **Response**: A single OpenSlo object or 404. A record in another department returns 404.
 - **`POST /api/v1/openslo`**: Create a new OpenSLO record.
   - **Request Body**: JSON representation of an `OpenSlo` object. Required fields: `apiVersion`, `kind`, `name`, `spec`. The body must not contain an `id`.
-  - **Response**: The created record (201 Created). 400 if the body contains an `id`, with a `message` field if the SLO target is invalid; 403 if `department` is not one of the caller's departments.
+  - **Response**: The created record (201 Created). 400 if the body contains an `id`, with a `message` field if the SLO target is invalid or `slos` contains an unknown id; 403 if `department` is not one of the caller's departments; 409 if the name is already used.
 - **`PUT /api/v1/openslo/{id}`**: Update an existing record.
   - **Request Body**: JSON representation of the updated `OpenSlo` object.
-  - **Response**: The updated record. 400 with a `message` field if the SLO target is invalid. 404 if the record does not exist or is in another department. 403 if the new `department` is not one of the caller's departments; nothing is changed in that case.
+  - **Response**: The updated record. 400 with a `message` field if the SLO target is invalid, or if `slos` contains an unknown or hidden id. 404 if the record does not exist or is in another department. 403 if the new `department` is not one of the caller's departments; nothing is changed in that case. 409 if another record has the name.
+  - **Business Services**: `slos` is required and replaces the service's SLOs (see [Relationships](#relationships)). `slos: []` unlinks all of them. `lastRefreshTime` in the body is ignored.
 - **`DELETE /api/v1/openslo/{id}`**: Delete a record and its associations.
-  - **Response**: 204 No Content. 404 if the record does not exist or is in another department. 403 when deleting an AlertingSource that is used by an SLO in another department.
+  - **Response**: 204 No Content. 404 if the record does not exist or is in another department. 403 when deleting an AlertingSource that is used by an SLO in another department. 409 when the record is still in use: an SLI used by an SLO, a DataSource used by an SLI, or a Business Service that has SLOs. Nothing is deleted in that case; the message lists the links to remove first.
 - **`GET /api/v1/openslo/{id}/report`**: (SLO records only) Retrieve a comprehensive status report.
   - **Response**: `SloReport` containing current value, target, status (Healthy/Warning/Breaching/No data), and error budget. When there is no data, `currentValue` and `errorBudget` are `null`. Only SLIs visible to the caller contribute; 404 for records in another department.
 - **`GET /api/v1/openslo/{id}/service-report`**: (Service records only) Retrieve a report for all SLOs in a service.
@@ -456,6 +511,16 @@ Manage raw performance data.
 - **`POST /api/v1/metrics`**: Manually record a new metric value for an SLI.
   - **Request Body**: `SliMetric` object linking to an SLI and DataSource.
   - **Response**: The created metric (201 Created). Returns `400 Bad Request` if the value is missing, not a number, or outside 0 to 100.
+
+### Reports API (`/api/v1/reports`)
+
+- **`POST /api/v1/reports/pdf`**: Generate a PDF report for the selected records.
+  - **Request Body**: JSON with
+    - `ids` (required): at least one record id. Records you cannot see are skipped.
+    - `timeUnit` (required): `DAYS`, `MONTHS` or `YEARS`, in any letter case. There is no default.
+    - `timeValue` (optional, default `1`): an integer of at least 1. The period may be at most 10 years (3650 days, 120 months or 10 years).
+    - `include*` flags (optional, default `true`).
+  - **Response**: The PDF file (200 OK). 400 with a `message` field if `ids` is empty, `timeUnit` is missing or unknown, `timeValue` is below 1, or the period is longer than 10 years. Nothing is generated in that case.
 
 ### User Management (`/api/v1/users`)
 

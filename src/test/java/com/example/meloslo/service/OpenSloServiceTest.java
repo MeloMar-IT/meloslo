@@ -47,6 +47,9 @@ public class OpenSloServiceTest {
     @Mock
     private UserRepository userRepository;
 
+    @Mock
+    private AlertUrlValidator alertUrlValidator;
+
     private OpenSloService service;
 
     private OpenSlo slo;
@@ -54,8 +57,8 @@ public class OpenSloServiceTest {
     @BeforeEach
     void setUp() {
         service = new OpenSloService(repository, metricRepository,
-                new DepartmentAccessService(userRepository), new OpenSloRedactor());
-        slo = new OpenSlo("openslo/v1", "SLO", "TestSLO", "Test SLO", "{}");
+                new DepartmentAccessService(userRepository), new OpenSloRedactor(), alertUrlValidator);
+        slo =new OpenSlo("openslo/v1", "SLO", "TestSLO", "Test SLO", "{}");
         slo.setId(1L);
     }
 
@@ -226,7 +229,7 @@ public class OpenSloServiceTest {
     void createWithExistingIdIsRejected() {
         loginAs("admin", null, "ROLE_ADMIN");
 
-        assertThrows(IllegalArgumentException.class, () -> service.createRecord(record(5L, "SLO", "a", "Finance")));
+        assertThrows(BadRequestException.class, () -> service.createRecord(record(5L, "SLO", "a", "Finance")));
         verify(repository, never()).save(any());
     }
 
@@ -253,6 +256,78 @@ public class OpenSloServiceTest {
         verify(repository, never()).save(any());
     }
 
+    private OpenSlo source(Long id, String url) {
+        OpenSlo s = record(id, "AlertingSource", "src", "Finance");
+        s.setAlertUrl(url);
+        return s;
+    }
+
+    @Test
+    void createValidatesAlertUrlAndDoesNotSaveWhenRefused() {
+        loginAs("admin", null, "ROLE_ADMIN");
+        OpenSlo s = source(null, "http://127.0.0.1/hook");
+        doThrow(new BadRequestException("Alert URL points to a private or internal address"))
+                .when(alertUrlValidator).validate("http://127.0.0.1/hook");
+
+        assertThrows(BadRequestException.class, () -> service.createRecord(s));
+
+        verify(repository, never()).save(any());
+    }
+
+    @Test
+    void updateWithMaskOfStoredUrlKeepsStoredUrlWithoutValidation() {
+        loginAs("admin", null, "ROLE_ADMIN");
+        OpenSlo existing = source(70L, "https://hooks.example.test/secret/path");
+        when(repository.findById(70L)).thenReturn(Optional.of(existing));
+        when(repository.save(existing)).thenReturn(existing);
+
+        service.updateRecord(70L, source(null, "https://hooks.example.test/****"));
+
+        assertThat(existing.getAlertUrl()).isEqualTo("https://hooks.example.test/secret/path");
+        verify(alertUrlValidator, never()).validate(any());
+    }
+
+    @Test
+    void updateWithNewUrlValidatesAndSetsIt() {
+        loginAs("admin", null, "ROLE_ADMIN");
+        OpenSlo existing = source(71L, "https://hooks.example.test/secret/path");
+        when(repository.findById(71L)).thenReturn(Optional.of(existing));
+        when(repository.save(existing)).thenReturn(existing);
+
+        service.updateRecord(71L, source(null, "https://93.184.216.34/new"));
+
+        verify(alertUrlValidator).validate("https://93.184.216.34/new");
+        assertThat(existing.getAlertUrl()).isEqualTo("https://93.184.216.34/new");
+    }
+
+    @Test
+    void updateWithRefusedUrlThrowsAndDoesNotSave() {
+        loginAs("admin", null, "ROLE_ADMIN");
+        OpenSlo existing = source(72L, "https://hooks.example.test/secret/path");
+        when(repository.findById(72L)).thenReturn(Optional.of(existing));
+        doThrow(new BadRequestException("refused")).when(alertUrlValidator).validate("http://10.0.0.5/x");
+
+        assertThrows(BadRequestException.class, () -> service.updateRecord(72L, source(null, "http://10.0.0.5/x")));
+
+        assertThat(existing.getAlertUrl()).isEqualTo("https://hooks.example.test/secret/path");
+        verify(repository, never()).save(any());
+    }
+
+    @Test
+    void updateWithMaskOfAnotherHostIsValidatedAndNotKept() {
+        loginAs("admin", null, "ROLE_ADMIN");
+        OpenSlo existing = source(73L, "https://hooks.example.test/secret/path");
+        when(repository.findById(73L)).thenReturn(Optional.of(existing));
+        doThrow(new BadRequestException("Enter the full alert URL"))
+                .when(alertUrlValidator).validate("https://other.example.test/****");
+
+        assertThrows(BadRequestException.class,
+                () -> service.updateRecord(73L, source(null, "https://other.example.test/****")));
+
+        assertThat(existing.getAlertUrl()).isEqualTo("https://hooks.example.test/secret/path");
+        verify(repository, never()).save(any());
+    }
+
     @Test
     void updateCanMoveRecordBetweenOwnDepartments() {
         loginAs("testuser", "Finance,Engineering", "ROLE_USER");
@@ -276,6 +351,140 @@ public class OpenSloServiceTest {
         assertThrows(RuntimeException.class, () -> service.deleteRecord(71L));
         verify(repository, never()).delete(any());
         verifyNoInteractions(metricRepository);
+    }
+
+    @Test
+    void deleteOfSliUsedByAnSloIsConflictAndChangesNothing() {
+        loginAs("admin", null, "ROLE_ADMIN");
+        OpenSlo sli = record(90L, "SLI", "used-sli", null);
+        when(repository.findById(90L)).thenReturn(Optional.of(sli));
+        when(repository.countSlosUsingSli(90L)).thenReturn(1L);
+
+        ConflictException e = assertThrows(ConflictException.class, () -> service.deleteRecord(90L));
+
+        assertThat(e.getMessage()).contains("used-sli").contains("1 SLO");
+        verify(repository, never()).delete(any());
+        verifyNoInteractions(metricRepository);
+    }
+
+    @Test
+    void deleteOfBusinessServiceWithSloIsConflict() {
+        loginAs("admin", null, "ROLE_ADMIN");
+        OpenSlo bs = record(91L, "BusinessService", "bs", null);
+        when(repository.findById(91L)).thenReturn(Optional.of(bs));
+        when(repository.countByService(bs)).thenReturn(2L);
+
+        assertThrows(ConflictException.class, () -> service.deleteRecord(91L));
+        verify(repository, never()).delete(any());
+        verifyNoInteractions(metricRepository);
+    }
+
+    @Test
+    void deleteOfDataSourceWithSliIsConflict() {
+        loginAs("admin", null, "ROLE_ADMIN");
+        OpenSlo ds = record(92L, "DataSource", "ds", null);
+        when(repository.findById(92L)).thenReturn(Optional.of(ds));
+        when(repository.countByDatasource(ds)).thenReturn(1L);
+
+        assertThrows(ConflictException.class, () -> service.deleteRecord(92L));
+        verify(repository, never()).delete(any());
+        verifyNoInteractions(metricRepository);
+    }
+
+    @Test
+    void updateWithNameOfAnotherRecordIsConflict() {
+        loginAs("admin", null, "ROLE_ADMIN");
+        OpenSlo existing = record(100L, "SLO", "a", null);
+        when(repository.findById(100L)).thenReturn(Optional.of(existing));
+        when(repository.findByName("b")).thenReturn(Optional.of(record(101L, "SLO", "b", null)));
+
+        assertThrows(ConflictException.class, () -> service.updateRecord(100L, record(null, "SLO", "b", null)));
+
+        assertThat(existing.getName()).isEqualTo("a");
+        verify(repository, never()).save(any());
+    }
+
+    @Test
+    void updateKeepingItsOwnNameIsAllowed() {
+        loginAs("admin", null, "ROLE_ADMIN");
+        OpenSlo existing = record(102L, "SLO", "same", null);
+        when(repository.findById(102L)).thenReturn(Optional.of(existing));
+        when(repository.findByName("same")).thenReturn(Optional.of(existing));
+        when(repository.save(existing)).thenReturn(existing);
+
+        assertThat(service.updateRecord(102L, record(null, "SLO", "same", null)).getName()).isEqualTo("same");
+    }
+
+    @Test
+    void createWithExistingNameIsConflict() {
+        loginAs("admin", null, "ROLE_ADMIN");
+        when(repository.findByName("dup")).thenReturn(Optional.of(record(103L, "SLO", "dup", null)));
+
+        assertThrows(ConflictException.class, () -> service.createRecord(record(null, "SLO", "dup", null)));
+        verify(repository, never()).save(any());
+    }
+
+    @Test
+    void updateOfMissingRecordIsResourceNotFound() {
+        loginAs("admin", null, "ROLE_ADMIN");
+        when(repository.findById(104L)).thenReturn(Optional.empty());
+
+        assertThrows(ResourceNotFoundException.class, () -> service.updateRecord(104L, record(null, "SLO", "x", null)));
+    }
+
+    @Test
+    void createClearsSystemManagedFields() {
+        loginAs("admin", null, "ROLE_ADMIN");
+        OpenSlo input = record(null, "SLO", "fresh", null);
+        input.setLastRefreshTime(LocalDateTime.now());
+        input.setLastAlertTime(LocalDateTime.now());
+        input.setLastFetchFailureTime(LocalDateTime.now());
+        input.setLastFetchError("boom");
+        when(repository.save(input)).thenReturn(input);
+
+        OpenSlo created = service.createRecord(input);
+
+        assertThat(created.getLastRefreshTime()).isNull();
+        assertThat(created.getLastAlertTime()).isNull();
+        assertThat(created.getLastFetchFailureTime()).isNull();
+        assertThat(created.getLastFetchError()).isNull();
+    }
+
+    @Test
+    void updateIgnoresLastRefreshTimeFromRequest() {
+        loginAs("admin", null, "ROLE_ADMIN");
+        OpenSlo existing = record(105L, "SLO", "keep", null);
+        when(repository.findById(105L)).thenReturn(Optional.of(existing));
+        when(repository.save(existing)).thenReturn(existing);
+        OpenSlo update = record(null, "SLO", "keep", null);
+        update.setLastRefreshTime(LocalDateTime.of(2000, 1, 1, 0, 0));
+
+        service.updateRecord(105L, update);
+
+        assertThat(existing.getLastRefreshTime()).isNull();
+    }
+
+    @Test
+    void businessServiceSloLinksWithNullEntryAreRejectedBeforeAnySave() {
+        loginAs("admin", null, "ROLE_ADMIN");
+        OpenSlo bs = record(106L, "BusinessService", "bs-links", null);
+        when(repository.findById(106L)).thenReturn(Optional.of(bs));
+        when(repository.save(bs)).thenReturn(bs);
+        OpenSlo update = record(null, "BusinessService", "bs-links", null);
+        update.setSlos(Arrays.asList((OpenSlo) null));
+
+        assertThrows(BadRequestException.class, () -> service.updateRecord(106L, update));
+        verify(repository, never()).save(argThat(r -> r != bs));
+    }
+
+    @Test
+    void businessServiceWithNullSlosIsRejected() {
+        loginAs("admin", null, "ROLE_ADMIN");
+        OpenSlo input = record(null, "BusinessService", "bs-null", null);
+        input.setSlos(null);
+        when(repository.save(input)).thenReturn(input);
+
+        assertThrows(BadRequestException.class, () -> service.createRecord(input));
     }
 
     @Test

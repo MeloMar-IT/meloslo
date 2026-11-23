@@ -6,6 +6,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mockito;
+import org.springframework.boot.test.system.CapturedOutput;
 import org.springframework.http.HttpEntity;
 import org.springframework.web.client.RestTemplate;
 
@@ -16,19 +17,22 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
+@org.junit.jupiter.api.extension.ExtendWith(org.springframework.boot.test.system.OutputCaptureExtension.class)
 class AlertingServiceTest {
 
     private OpenSloRepository openSloRepository;
     private RestTemplate restTemplate;
     private TaskManagementService taskManagementService;
     private AlertingService alertingService;
+    private AlertUrlValidator alertUrlValidator;
 
     @BeforeEach
     void setUp() {
         openSloRepository = mock(OpenSloRepository.class);
         restTemplate = mock(RestTemplate.class);
         taskManagementService = mock(TaskManagementService.class);
-        alertingService = new AlertingService(openSloRepository, restTemplate, taskManagementService);
+        alertUrlValidator = mock(AlertUrlValidator.class);
+        alertingService = new AlertingService(openSloRepository, restTemplate, taskManagementService, alertUrlValidator);
     }
 
     @Test
@@ -67,6 +71,74 @@ class AlertingServiceTest {
 
         verify(openSloRepository).save(slo);
         assertNotNull(slo.getLastAlertTime());
+    }
+
+    private Runnable queuedAlertTask(OpenSlo slo) {
+        alertingService.sendAlertIfNeeded(slo);
+        when(openSloRepository.findById(slo.getId())).thenReturn(java.util.Optional.of(slo));
+        ArgumentCaptor<Runnable> runnableCaptor = ArgumentCaptor.forClass(Runnable.class);
+        verify(taskManagementService).runAsyncTask(eq("Alert-" + slo.getId()), runnableCaptor.capture());
+        return runnableCaptor.getValue();
+    }
+
+    private OpenSlo breachingSloWithUrl(long id, String url) {
+        OpenSlo source = new OpenSlo();
+        source.setName("hook-source");
+        source.setKind("AlertingSource");
+        source.setAlertUrl(url);
+        source.setAlertPayload("{}");
+        OpenSlo slo = new OpenSlo();
+        slo.setId(id);
+        slo.setKind("SLO");
+        slo.setName("slo-" + id);
+        slo.setStatus("Breaching");
+        slo.setAlertingSource(source);
+        return slo;
+    }
+
+    @Test
+    void shouldNotPostWhenStoredUrlFailsValidation() {
+        OpenSlo slo = breachingSloWithUrl(10L, "http://127.0.0.1/hook");
+        doThrow(new BadRequestException("Alert URL points to a private or internal address"))
+                .when(alertUrlValidator).validate("http://127.0.0.1/hook");
+
+        queuedAlertTask(slo).run();
+
+        verify(restTemplate, never()).postForEntity(anyString(), any(), any());
+        assertNull(slo.getLastAlertTime());
+    }
+
+    @Test
+    void failureLogShowsHostAndCategoryButNeverPathOrMessage(CapturedOutput output) {
+        String url = "https://hooks.example.test/SECRETPATH";
+        OpenSlo slo = breachingSloWithUrl(11L, url);
+        when(restTemplate.postForEntity(eq(url), any(), eq(String.class)))
+                .thenThrow(new org.springframework.web.client.ResourceAccessException("I/O error on POST " + url));
+        Runnable task = queuedAlertTask(slo);
+
+        task.run();
+
+        String log = output.getAll();
+        assertTrue(log.contains("hooks.example.test"), log);
+        assertTrue(log.contains("ResourceAccessException"), log);
+        assertFalse(log.contains("SECRETPATH"), log);
+    }
+
+    @Test
+    void httpErrorLogShowsStatusOnly(CapturedOutput output) {
+        String url = "https://hooks.example.test/SECRETPATH";
+        OpenSlo slo = breachingSloWithUrl(12L, url);
+        when(restTemplate.postForEntity(eq(url), any(), eq(String.class))).thenThrow(
+                org.springframework.web.client.HttpClientErrorException.create(
+                        org.springframework.http.HttpStatus.NOT_FOUND, "Not Found",
+                        new org.springframework.http.HttpHeaders(), "body SECRETPATH".getBytes(), null));
+        Runnable task = queuedAlertTask(slo);
+
+        task.run();
+
+        String log = output.getAll();
+        assertTrue(log.contains("HTTP 404"), log);
+        assertFalse(log.contains("SECRETPATH"), log);
     }
 
     @Test

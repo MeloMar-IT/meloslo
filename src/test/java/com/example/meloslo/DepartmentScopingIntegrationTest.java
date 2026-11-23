@@ -44,6 +44,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  */
 @SpringBootTest
 @AutoConfigureMockMvc
+@org.springframework.context.annotation.Import(CsrfTestConfig.class)
 class DepartmentScopingIntegrationTest {
 
     private static final String BASE = "/api/v1/openslo";
@@ -250,6 +251,25 @@ class DepartmentScopingIntegrationTest {
     }
 
     @Test
+    void servicePutNeverUnlinksOrLinksSlosOfOtherDepartments() throws Exception {
+        OpenSlo finChild = repository.findByName("it-biz-fin-child").orElseThrow();
+        OpenSlo infraChild = repository.findByName("it-biz-infra-child").orElseThrow();
+        String prefix = "{\"apiVersion\":\"openslo/v1\",\"kind\":\"BusinessService\",\"name\":\"it-biz-svc\","
+                + "\"displayName\":\"x\",\"spec\":\"{}\",\"department\":\"Finance\",\"slos\":";
+
+        mockMvc.perform(put(BASE + "/" + bizSvc.getId()).with(testuser).contentType(MediaType.APPLICATION_JSON)
+                .content(prefix + "[{\"id\":" + finChild.getId() + "}]}"))
+                .andExpect(status().isOk());
+        assertThat(repository.findById(infraChild.getId()).orElseThrow().getService().getId()).isEqualTo(bizSvc.getId());
+
+        mockMvc.perform(put(BASE + "/" + bizSvc.getId()).with(testuser).contentType(MediaType.APPLICATION_JSON)
+                .content(prefix + "[{\"id\":" + infraChild.getId() + "}]}"))
+                .andExpect(status().isBadRequest());
+        assertThat(repository.findById(finChild.getId()).orElseThrow().getService().getId()).isEqualTo(bizSvc.getId());
+        assertThat(repository.findById(infraChild.getId()).orElseThrow().getService().getId()).isEqualTo(bizSvc.getId());
+    }
+
+    @Test
     void createWithExistingIdIsRejectedAndDoesNotOverwrite() throws Exception {
         mockMvc.perform(post(BASE).with(testuser).contentType(MediaType.APPLICATION_JSON)
                 .content(bodyWithId(infraSlo.getId(), "it-infra-slo", "Finance")))
@@ -350,7 +370,7 @@ class DepartmentScopingIntegrationTest {
     }
 
     private byte[] pdfFor(RequestPostProcessor who, Long... ids) throws Exception {
-        String json = "{\"ids\":" + java.util.Arrays.toString(ids) + "}";
+        String json = "{\"ids\":" + java.util.Arrays.toString(ids) + ",\"timeUnit\":\"YEARS\"}";
         return mockMvc.perform(post("/api/v1/reports/pdf").with(who)
                         .contentType(MediaType.APPLICATION_JSON).content(json))
                 .andExpect(status().isOk())
