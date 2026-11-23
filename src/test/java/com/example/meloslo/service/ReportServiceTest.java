@@ -356,7 +356,7 @@ class ReportServiceTest {
         OpenSloService real = new OpenSloService(mock(com.example.meloslo.repository.OpenSloRepository.class),
                 metricRepository,
                 new DepartmentAccessService(mock(com.example.meloslo.repository.UserRepository.class)),
-                new OpenSloRedactor());
+                new OpenSloRedactor(), mock(AlertUrlValidator.class));
         var report = real.calculateSloReport(slo);
 
         assertEquals(94.0, report.getCurrentValue(), 1e-9);

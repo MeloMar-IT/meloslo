@@ -5,6 +5,12 @@
 - The H2 console (`/h2-console`) is off by default and enabled only under the `dev` profile, where it requires the ADMIN role (#35).
 - Live mode no longer creates `admin/admin` or `testuser/testuser`. It creates only `admin`, with a password from `APP_ADMIN_INITIAL_PASSWORD` or a random one logged once (#35).
 - Test mode now logs a WARN that the demo accounts are active (#35).
+- The encryption key now comes from `APP_ENCRYPTION_KEY` (16, 24 or 32 bytes). The committed key and its fallback are removed. The key is required in `prod` and for any persistent datasource (anything other than `jdbc:h2:mem:`). Startup fails with a message that names the variable (#42).
+- New `APP_ENCRYPTION_LEGACY_KEYS` (decrypt-only old keys) and `APP_ENCRYPTION_REENCRYPT` (opt-in re-encryption of stored data at startup). The committed key is compromised and must be rotated (#42).
+- SQL and debug logging are enabled only in the `dev` profile. `prod` logs at INFO and never logs SQL or bound parameters (#42).
+- CSRF protection is on for session requests. The token is in the `XSRF-TOKEN` cookie and must be sent as `X-XSRF-TOKEN`. Basic-auth clients without a session are exempt, except on login and logout (#42).
+- Alert URLs are checked when a record is created, updated and before each send. Private, loopback, link-local and other internal addresses are refused, and only `http` and `https` are allowed. Use `APP_ALERTING_ALLOWED_HOSTS` to limit the hosts (#42).
+- Alert URLs are masked in API responses and the UI as `scheme://host/****`. To change a URL, the full new value must be entered (#42).
 
 ### Removed
 - The SQL query console (`POST /api/v1/database/query`) and its UI. Queries using `FILE_READ`, `CSVWRITE` or `CREATE ALIAS` can no longer be run (#35).
@@ -46,6 +52,7 @@
 
 ### Migration
 - Existing users without a role are migrated at startup. `admin` becomes `ADMIN` and must change its password in live mode. All other users become `USER` (#36).
+- Existing encrypted data needs a one-time re-encryption to the new key. Set `APP_ENCRYPTION_LEGACY_KEYS` to the old key, start once with `APP_ENCRYPTION_REENCRYPT=true`, then turn it off. See the README (#42).
 
 ## [0.1.0] - 2026-04-05
 ### Added

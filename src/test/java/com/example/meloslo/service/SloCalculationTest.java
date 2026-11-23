@@ -37,7 +37,8 @@ class SloCalculationTest {
     void setUp() {
         MockitoAnnotations.openMocks(this);
         service = new OpenSloService(repository, metricRepository,
-                new DepartmentAccessService(userRepository), new OpenSloRedactor());
+                new DepartmentAccessService(userRepository), new OpenSloRedactor(),
+                org.mockito.Mockito.mock(AlertUrlValidator.class));
     }
 
     @Test

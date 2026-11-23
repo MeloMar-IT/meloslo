@@ -9,7 +9,6 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import com.example.meloslo.util.EncryptionConverter;
 import com.example.meloslo.util.EncryptionUtils;
 import org.junit.jupiter.api.BeforeEach;
-import org.springframework.beans.factory.annotation.Value;
 
 import java.util.Map;
 
@@ -27,20 +26,17 @@ public class EncryptionTest {
     @Autowired
     private OpenSloRepository repository;
 
-    @Value("${app.encryption.key}")
-    private String encryptionKey;
-
     @BeforeEach
     void setUp() {
-        // Since we are using static field in EncryptionUtils, we need to initialize it
-        // in DataJpaTest where full context (including EncryptionUtils bean) might not be fully wired as a component
-        EncryptionUtils.setEncryptionKey(encryptionKey);
+        // The key state is static and @DataJpaTest does not load the EncryptionUtils bean:
+        // start from the per-JVM default key.
+        EncryptionUtils.configure("", "", false);
     }
 
     @Test
     void testOpenSloFieldsAreEncryptedInDatabase() {
         String originalSpec = "apiVersion: openslo/v1\nkind: DataSource\nspec:\n  url: http://secret.com";
-        String originalAlertUrl = "https://hooks.slack.com/services/T000/B000/XXXX";
+        String originalAlertUrl = "https://example.invalid/webhook/test";
         
         OpenSlo slo = new OpenSlo("openslo/v1", "DataSource", "secret-source", "Secret Source", originalSpec);
         slo.setAlertUrl(originalAlertUrl);

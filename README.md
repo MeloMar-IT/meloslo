@@ -58,6 +58,24 @@ MeloSlo includes a secure login system and administrative tools to manage users 
   - **Live mode (`live`)**: No fixed password. The password is taken from `APP_ADMIN_INITIAL_PASSWORD` (property `app.admin.initial-password`). If that is not set, a random 24-character password is generated and logged once at WARN level on first startup. Copy it from the log and change it after the first login.
 - **Test User**: Username: `testuser`, Password: `testuser` (Role `USER`, restricted to 'Finance' and 'Engineering' departments). Only seeded in test mode. Live mode never creates this account.
 
+### API Clients and CSRF
+
+Session-based requests that change data (`POST`, `PUT`, `DELETE`) must send a CSRF token.
+
+- After login, or on any `GET /api/v1/users/me`, the server sets an `XSRF-TOKEN` cookie.
+- Send the cookie value in an `X-XSRF-TOKEN` header with each state-changing request. Without it the response is `403 Forbidden`.
+- Login (`POST /api/login`) and logout (`POST /api/logout`) always need a token, and each sets a new one.
+- Clients that use HTTP Basic and send no session cookie are exempt from the token. A request that carries a session is never exempt.
+
+### Encryption Key
+
+Sensitive fields (SLO specs, alert URLs and alert payloads) are encrypted with AES-GCM. The key is read from `APP_ENCRYPTION_KEY`. It is never stored in the repository.
+
+- Generate a key with `openssl rand -base64 24`. This gives a 32-character value, a valid 32-byte key.
+- The key must be 16, 24 or 32 bytes. Keep it in your secret store and supply it as an environment variable.
+- It is **required** in `prod` and for any database that is not in-memory (`jdbc:h2:mem:`). The application refuses to start without it, and the error names `APP_ENCRYPTION_KEY`.
+- In the in-memory test database a random key is used for that run only. Data encrypted with it cannot be read after a restart.
+
 ### H2 Console
 
 The H2 database console (`/h2-console`) is **off by default**.
@@ -96,6 +114,38 @@ app.datasource.mode=live
 ### DTAP Environments and Configuration
 
 MeloSlo supports different configuration files for Development, Testing, Acceptance, and Production (DTAP) environments using Spring Boot's profile mechanism.
+
+#### Environment Variables
+
+| Variable | Purpose |
+|----------|---------|
+| `APP_ENCRYPTION_KEY` | Current encryption key (16, 24 or 32 bytes). Required in `prod` and for any persistent database. |
+| `APP_ENCRYPTION_LEGACY_KEYS` | Comma-separated old keys. They are used only to decrypt existing data. |
+| `APP_ENCRYPTION_REENCRYPT` | `true` re-encrypts stored data under `APP_ENCRYPTION_KEY` at startup. Default `false`. |
+| `APP_ALERTING_ALLOWED_HOSTS` | Comma-separated hosts that alert URLs may use (exact host or subdomain). Empty allows any public host. |
+| `APP_ADMIN_INITIAL_PASSWORD` | Initial password of `admin` in live mode. |
+
+Settings in `application-prod.properties`:
+- `app.encryption.require-key=true`: startup fails without `APP_ENCRYPTION_KEY`.
+- SQL and bound-parameter logging is off, and Spring Security logs at INFO. SQL and DEBUG logging are enabled only in `dev`.
+
+**Production checklist**
+- Set `APP_ENCRYPTION_KEY` from your secret store.
+- Set `APP_ALERTING_ALLOWED_HOSTS` to the webhook hosts you use. The allow-list is empty, and therefore open, by default.
+- Restrict outbound traffic from the application host to non-private address ranges. The application checks alert addresses when they are saved and again before each send, but it does not prevent DNS rebinding (a host name that changes its address between the check and the send). Egress firewall rules close that gap, so they are a deployment requirement.
+
+#### Migrating the Encryption Key
+
+Use this when an existing database was encrypted with the key that was committed to the repository. That key is compromised and must be rotated.
+
+1. Generate a new key and set `APP_ENCRYPTION_KEY` to it.
+2. Set `APP_ENCRYPTION_LEGACY_KEYS=ThisIsASecretK16` so the old data can still be read.
+3. Start the application once with `APP_ENCRYPTION_REENCRYPT=true`. Every record is rewritten under the new key. Values that no configured key can decrypt are left unchanged and counted in a WARN log line.
+4. Check that the records load correctly in the UI and the API.
+5. Restart with `APP_ENCRYPTION_REENCRYPT` removed or set to `false`.
+6. Keep the legacy key until step 4 is verified. Once verified, remove `APP_ENCRYPTION_LEGACY_KEYS`.
+
+Without the legacy key, old data cannot be decrypted. It is returned as the raw ciphertext, and saving that record again would encrypt the ciphertext, so the data would be lost.
 
 #### Using Profiles
 
@@ -200,6 +250,8 @@ MeloSlo supports automated alerting when an SLO enters the **Breaching** status.
 - **Association**: Each SLO can be linked to one `AlertingSource`.
 - **Trigger**: When the background scheduler fetches metrics and detects that a linked SLO is breaching, it sends a POST request to the configured webhook URL.
 - **Spam Prevention**: To prevent excessive notifications, MeloSlo will only send an alert once every hour for a specific SLO while it remains in a breaching state.
+- **URL checks**: An alert URL must use `http` or `https` and must not point to a loopback, private, link-local, carrier-grade NAT or other internal address, including IPv6 and IPv4-mapped forms. The check runs when the record is saved and again before each send. Set `APP_ALERTING_ALLOWED_HOSTS` to restrict the hosts (see [Environment Variables](#environment-variables)).
+- **Masked URLs**: API responses and the UI show the alert URL as `https://hooks.example.test/****`. Only the scheme and host are visible. To change the URL, enter the full new value. Sending the masked value back keeps the stored URL.
 
 ## OpenSLO Examples
 

@@ -9,6 +9,7 @@ import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
+import org.springframework.web.client.RestClientResponseException;
 import org.springframework.web.client.RestTemplate;
 
 import java.time.LocalDateTime;
@@ -21,9 +22,12 @@ public class AlertingService {
     private final RestTemplate restTemplate;
     private final OpenSloRepository openSloRepository;
     private final TaskManagementService taskManagementService;
+    private final AlertUrlValidator alertUrlValidator;
 
     @Autowired
-    public AlertingService(OpenSloRepository openSloRepository, RestTemplate restTemplate, TaskManagementService taskManagementService) {
+    public AlertingService(OpenSloRepository openSloRepository, RestTemplate restTemplate, TaskManagementService taskManagementService,
+                           AlertUrlValidator alertUrlValidator) {
+        this.alertUrlValidator = alertUrlValidator;
         this.openSloRepository = openSloRepository;
         this.restTemplate = restTemplate;
         this.taskManagementService = taskManagementService;
@@ -63,10 +67,18 @@ public class AlertingService {
                 return;
             }
 
+            try {
+                alertUrlValidator.validate(url);
+            } catch (BadRequestException e) {
+                log.warn("Alert for SLO {} not sent: alert URL of source {} (host {}) refused: {}",
+                        currentSlo.getName(), source.getName(), AlertUrlValidator.hostOf(url), e.getMessage());
+                return;
+            }
+
             String payload = replaceVariables(payloadTemplate, currentSlo, status, value);
 
             try {
-                log.info("Sending alert for SLO {} to {}", currentSlo.getName(), url);
+                log.info("Sending alert for SLO {} to host {}", currentSlo.getName(), AlertUrlValidator.hostOf(url));
                 HttpHeaders headers = new HttpHeaders();
                 headers.setContentType(MediaType.APPLICATION_JSON);
                 HttpEntity<String> entity = new HttpEntity<>(payload, headers);
@@ -76,7 +88,12 @@ public class AlertingService {
                 currentSlo.setLastAlertTime(LocalDateTime.now());
                 openSloRepository.save(currentSlo);
             } catch (Exception e) {
-                log.error("Failed to send alert for SLO {}: {}", currentSlo.getName(), e.getMessage());
+                // Never log e.getMessage(): it can contain the full URL and the response body
+                String reason = e instanceof RestClientResponseException rre
+                        ? "HTTP " + rre.getStatusCode().value()
+                        : e.getClass().getSimpleName();
+                log.error("Failed to send alert for SLO {} to host {}: {}", currentSlo.getName(),
+                        AlertUrlValidator.hostOf(url), reason);
             }
         });
     }

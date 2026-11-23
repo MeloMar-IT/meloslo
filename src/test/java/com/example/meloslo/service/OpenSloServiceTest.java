@@ -47,6 +47,9 @@ public class OpenSloServiceTest {
     @Mock
     private UserRepository userRepository;
 
+    @Mock
+    private AlertUrlValidator alertUrlValidator;
+
     private OpenSloService service;
 
     private OpenSlo slo;
@@ -54,8 +57,8 @@ public class OpenSloServiceTest {
     @BeforeEach
     void setUp() {
         service = new OpenSloService(repository, metricRepository,
-                new DepartmentAccessService(userRepository), new OpenSloRedactor());
-        slo = new OpenSlo("openslo/v1", "SLO", "TestSLO", "Test SLO", "{}");
+                new DepartmentAccessService(userRepository), new OpenSloRedactor(), alertUrlValidator);
+        slo =new OpenSlo("openslo/v1", "SLO", "TestSLO", "Test SLO", "{}");
         slo.setId(1L);
     }
 
@@ -250,6 +253,78 @@ public class OpenSloServiceTest {
 
         assertThat(existing.getDepartment()).isEqualTo("Finance");
         assertThat(existing.getName()).isEqualTo("fin");
+        verify(repository, never()).save(any());
+    }
+
+    private OpenSlo source(Long id, String url) {
+        OpenSlo s = record(id, "AlertingSource", "src", "Finance");
+        s.setAlertUrl(url);
+        return s;
+    }
+
+    @Test
+    void createValidatesAlertUrlAndDoesNotSaveWhenRefused() {
+        loginAs("admin", null, "ROLE_ADMIN");
+        OpenSlo s = source(null, "http://127.0.0.1/hook");
+        doThrow(new BadRequestException("Alert URL points to a private or internal address"))
+                .when(alertUrlValidator).validate("http://127.0.0.1/hook");
+
+        assertThrows(BadRequestException.class, () -> service.createRecord(s));
+
+        verify(repository, never()).save(any());
+    }
+
+    @Test
+    void updateWithMaskOfStoredUrlKeepsStoredUrlWithoutValidation() {
+        loginAs("admin", null, "ROLE_ADMIN");
+        OpenSlo existing = source(70L, "https://hooks.example.test/secret/path");
+        when(repository.findById(70L)).thenReturn(Optional.of(existing));
+        when(repository.save(existing)).thenReturn(existing);
+
+        service.updateRecord(70L, source(null, "https://hooks.example.test/****"));
+
+        assertThat(existing.getAlertUrl()).isEqualTo("https://hooks.example.test/secret/path");
+        verify(alertUrlValidator, never()).validate(any());
+    }
+
+    @Test
+    void updateWithNewUrlValidatesAndSetsIt() {
+        loginAs("admin", null, "ROLE_ADMIN");
+        OpenSlo existing = source(71L, "https://hooks.example.test/secret/path");
+        when(repository.findById(71L)).thenReturn(Optional.of(existing));
+        when(repository.save(existing)).thenReturn(existing);
+
+        service.updateRecord(71L, source(null, "https://93.184.216.34/new"));
+
+        verify(alertUrlValidator).validate("https://93.184.216.34/new");
+        assertThat(existing.getAlertUrl()).isEqualTo("https://93.184.216.34/new");
+    }
+
+    @Test
+    void updateWithRefusedUrlThrowsAndDoesNotSave() {
+        loginAs("admin", null, "ROLE_ADMIN");
+        OpenSlo existing = source(72L, "https://hooks.example.test/secret/path");
+        when(repository.findById(72L)).thenReturn(Optional.of(existing));
+        doThrow(new BadRequestException("refused")).when(alertUrlValidator).validate("http://10.0.0.5/x");
+
+        assertThrows(BadRequestException.class, () -> service.updateRecord(72L, source(null, "http://10.0.0.5/x")));
+
+        assertThat(existing.getAlertUrl()).isEqualTo("https://hooks.example.test/secret/path");
+        verify(repository, never()).save(any());
+    }
+
+    @Test
+    void updateWithMaskOfAnotherHostIsValidatedAndNotKept() {
+        loginAs("admin", null, "ROLE_ADMIN");
+        OpenSlo existing = source(73L, "https://hooks.example.test/secret/path");
+        when(repository.findById(73L)).thenReturn(Optional.of(existing));
+        doThrow(new BadRequestException("Enter the full alert URL"))
+                .when(alertUrlValidator).validate("https://other.example.test/****");
+
+        assertThrows(BadRequestException.class,
+                () -> service.updateRecord(73L, source(null, "https://other.example.test/****")));
+
+        assertThat(existing.getAlertUrl()).isEqualTo("https://hooks.example.test/secret/path");
         verify(repository, never()).save(any());
     }
 
