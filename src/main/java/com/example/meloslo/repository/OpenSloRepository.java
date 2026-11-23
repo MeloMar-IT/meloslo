@@ -11,6 +11,12 @@ import java.util.Optional;
 public interface OpenSloRepository extends JpaRepository<OpenSlo, Long> {
     Optional<OpenSlo> findByName(String name);
     List<OpenSlo> findByKind(String kind);
+    List<OpenSlo> findByService(OpenSlo service);
+    long countByService(OpenSlo service);
+    long countByDatasource(OpenSlo datasource);
+
+    @org.springframework.data.jpa.repository.Query("SELECT COUNT(o) FROM OpenSlo o JOIN o.slis s WHERE s.id = :sliId")
+    long countSlosUsingSli(@org.springframework.data.repository.query.Param("sliId") Long sliId);
 
     @org.springframework.data.jpa.repository.Query("SELECT o FROM OpenSlo o LEFT JOIN FETCH o.slis WHERE o.kind = :kind")
     List<OpenSlo> findByKindWithSlis(String kind);

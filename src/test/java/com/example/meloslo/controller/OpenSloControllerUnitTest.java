@@ -2,7 +2,11 @@ package com.example.meloslo.controller;
 
 import com.example.meloslo.dto.DashboardStats;
 import com.example.meloslo.model.OpenSlo;
+import com.example.meloslo.service.BadRequestException;
+import com.example.meloslo.service.ConflictException;
 import com.example.meloslo.service.InvalidSliValueException;
+import com.example.meloslo.service.ResourceNotFoundException;
+import org.springframework.dao.DataIntegrityViolationException;
 import com.example.meloslo.service.OpenSloService;
 import com.example.meloslo.repository.UserRepository;
 import com.example.meloslo.config.SecurityConfig;
@@ -21,6 +25,8 @@ import org.springframework.test.web.servlet.MockMvc;
 import java.util.Arrays;
 import java.util.Optional;
 
+import static org.hamcrest.Matchers.containsString;
+import static org.hamcrest.Matchers.not;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
@@ -115,12 +121,88 @@ public class OpenSloControllerUnitTest {
 
     @Test
     void shouldReturnNotFoundWhenUpdatingNonExistentRecord() throws Exception {
-        when(service.updateRecord(eq(99L), any(OpenSlo.class))).thenThrow(new RuntimeException("Not found"));
+        when(service.updateRecord(eq(99L), any(OpenSlo.class))).thenThrow(new ResourceNotFoundException("Not found"));
 
         mockMvc.perform(put("/api/v1/openslo/99")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(slo)))
-                .andExpect(status().isNotFound());
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.message").value("Not found"));
+    }
+
+    @Test
+    void shouldReturnConflictWhenUpdateHitsDuplicateName() throws Exception {
+        when(service.updateRecord(eq(1L), any(OpenSlo.class))).thenThrow(new ConflictException("dup"));
+
+        mockMvc.perform(put("/api/v1/openslo/1")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(slo)))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.status").value(409))
+                .andExpect(jsonPath("$.message").value("dup"));
+    }
+
+    @Test
+    void shouldReturnConflictWhenDeletingRecordInUse() throws Exception {
+        doThrow(new ConflictException("in use")).when(service).deleteRecord(5L);
+
+        mockMvc.perform(delete("/api/v1/openslo/5"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.message").value("in use"));
+    }
+
+    @Test
+    void shouldReturnNotFoundForReportsOnMissingOrWrongKind() throws Exception {
+        when(service.getSloReport(7L)).thenThrow(new ResourceNotFoundException("no slo"));
+        when(service.getServiceReport(7L)).thenThrow(new ResourceNotFoundException("no svc"));
+        when(service.getSliReport(7L)).thenThrow(new ResourceNotFoundException("no sli"));
+
+        mockMvc.perform(get("/api/v1/openslo/7/report")).andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.message").value("no slo"));
+        mockMvc.perform(get("/api/v1/openslo/7/service-report")).andExpect(status().isNotFound());
+        mockMvc.perform(get("/api/v1/openslo/7/sli-report")).andExpect(status().isNotFound());
+    }
+
+    @Test
+    void shouldReturnNotFoundWithMessageForUnknownRecord() throws Exception {
+        when(service.getRecordById(404L)).thenReturn(java.util.Optional.empty());
+
+        mockMvc.perform(get("/api/v1/openslo/404"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.message").isNotEmpty());
+    }
+
+    @Test
+    void shouldHideSqlWhenCreateViolatesConstraint() throws Exception {
+        when(service.createRecord(any(OpenSlo.class)))
+                .thenThrow(new DataIntegrityViolationException("SQL constraint UK_NAME violated"));
+
+        mockMvc.perform(post("/api/v1/openslo")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(slo)))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.message").isNotEmpty())
+                .andExpect(jsonPath("$.message", not(containsString("SQL"))));
+    }
+
+    @Test
+    void shouldReturnBadRequestWithMessageForInvalidBody() throws Exception {
+        mockMvc.perform(post("/api/v1/openslo")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"kind\":\"SLO\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").isNotEmpty());
+    }
+
+    @Test
+    void shouldNotMapUnexpectedRuntimeExceptionTo404() {
+        RuntimeException boom = new RuntimeException("boom");
+        when(service.getSliReport(8L)).thenThrow(boom);
+
+        jakarta.servlet.ServletException ex = org.junit.jupiter.api.Assertions.assertThrows(
+                jakarta.servlet.ServletException.class,
+                () -> mockMvc.perform(get("/api/v1/openslo/8/sli-report")));
+        org.junit.jupiter.api.Assertions.assertSame(boom, ex.getCause());
     }
 
     @Test
@@ -163,12 +245,13 @@ public class OpenSloControllerUnitTest {
 
     @Test
     void shouldReturnBadRequestWhenCreatingWithId() throws Exception {
-        when(service.createRecord(any(OpenSlo.class))).thenThrow(new IllegalArgumentException("id"));
+        when(service.createRecord(any(OpenSlo.class))).thenThrow(new BadRequestException("id"));
 
         mockMvc.perform(post("/api/v1/openslo")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(slo)))
-                .andExpect(status().isBadRequest());
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("id"));
     }
 
     @Test
@@ -183,7 +266,7 @@ public class OpenSloControllerUnitTest {
 
     @Test
     void shouldReturnNotFoundWhenDeletingUnknownOrForeignRecord() throws Exception {
-        doThrow(new RuntimeException("not found")).when(service).deleteRecord(99L);
+        doThrow(new ResourceNotFoundException("not found")).when(service).deleteRecord(99L);
 
         mockMvc.perform(delete("/api/v1/openslo/99"))
                 .andExpect(status().isNotFound());

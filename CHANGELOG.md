@@ -27,11 +27,22 @@
 - Creating and updating users validates input. Unknown user ids return 404, duplicate usernames return 409, and demoting or deleting the last administrator returns 409.
 - Passwords must be 8–128 characters.
 - Changing a user's role, password, or username, or deleting the user, ends that user's open sessions.
+- Errors from the OpenSLO API are JSON objects with `status`, `error` and `message`. A missing or hidden record returns 404, a conflict returns 409 and invalid input returns 400. The `message` says what is wrong (#41).
+- Deleting an SLI that an SLO uses, a DataSource that an SLI uses, or a Business Service that has SLOs returns 409 and deletes nothing. The message lists the links to remove first (#41).
+- A name that another record already uses returns 409 on create and on update (#41).
+- `POST /api/v1/reports/pdf` validates its options and returns 400 with a `message` when they are invalid. `ids` must contain at least one record, `timeValue` must be at least 1, and the period may be at most 10 years (3650 days, 120 months or 10 years) (#41).
+- **Breaking API change:** `timeUnit` is required for `POST /api/v1/reports/pdf`. It no longer defaults to `YEARS`. Accepted values are `DAYS`, `MONTHS` and `YEARS`, in any letter case (#41).
+- `lastRefreshTime` in a request is ignored on create and update. On create, `lastAlertTime`, `lastFetchFailureTime` and `lastFetchError` are cleared as well (#41).
+- The SLOs chosen for a Business Service are now saved on create and update. A PUT replaces the list: SLOs left out are unlinked, and `slos: []` unlinks all of them. An SLO that belongs to another Business Service is moved to this one. A Business Service request must include `slos`. Unknown or hidden ids, non-SLO records and a missing `slos` return 400 and change nothing (#41).
+- The UI shows the server's message when saving, generating a report or deleting fails (#41).
 
 ### Fixed
 - Restarting in test mode no longer wipes all records and users when a demo record was renamed or deleted, the `testuser` account was removed, or an SLI has fewer than 30 metrics, including SLIs created by users (#40).
 - A failed metric fetch no longer stores a `0.0` sample, which could breach an SLO and fire a false alert. The failure is recorded on the SLI in `last_fetch_failure_time` and `last_fetch_error` instead.
 - A user could take over the administrator account by changing their username to `admin`, or by updating the admin account through the API (#36).
+- Update, delete and report requests returned 404 for every error. A delete blocked by a link, a duplicate name and unexpected server errors all looked like "not found". Now only a missing or hidden record returns 404, and other errors return their own status (#41).
+- A bad request on create returned 400 with no explanation. It now returns a JSON `message` (#41).
+- A database constraint violation, such as a race on a unique name, returns 409 with a fixed message. The SQL text is never sent to the client (#41).
 
 ### Migration
 - Existing users without a role are migrated at startup. `admin` becomes `ADMIN` and must change its password in live mode. All other users become `USER` (#36).

@@ -156,7 +156,7 @@ When creating or editing a record, you will be presented with several options:
 ### Relationships
 
 - **SLOs** can be linked to one **Service** and one or more **SLIs**. Linking multiple SLIs to a single SLO allows for a consolidated reliability view across multiple metrics.
-- **Services** can be linked to multiple **SLOs**.
+- **Services** can be linked to multiple **SLOs**. The link is set from the Business Service: its `slos` list is the full set of SLOs for that service, and saving replaces the list. An SLO belongs to one service, so linking it to another Business Service moves it. Only SLOs you can see are changed.
 - **SLIs** are linked to a **DataSource** which defines where their metrics are fetched from.
 - **AlertingSources** can be linked to multiple **SLOs** to receive breach notifications.
 
@@ -349,7 +349,7 @@ MeloSlo supports storing actual performance metrics and calculating SLOs and Err
 
 MeloSlo allows you to generate professional PDF reports for your Services and SLOs.
 
-- **Time Period**: Reports always cover the performance over the last 365 days.
+- **Time Period**: Choose the period as a value and a unit (days, months or years). The default is 1 year. The period may be at most 10 years (3650 days, 120 months or 10 years). See the [Reports API](#reports-api-apiv1reports).
 - **Selection**: You can select one or more Services or SLOs to include in a single PDF report. Selected records outside your departments are skipped silently, and a Service only lists the child SLOs you can see.
 - **Content**: Each report includes:
   - Average performance (SLO value) over the last year.
@@ -421,6 +421,8 @@ spec:
 
 The MeloSlo API is accessible under the `/api/v1` base path.
 
+Errors are JSON objects with `status`, `error` and `message`, for example `{"status": 409, "error": "Conflict", "message": "A record named 'x' already exists"}`. `400` covers invalid input, `404` a missing or hidden record, and `409` a duplicate name or a record that is still in use. A database constraint violation is reported as `409` with a fixed message; SQL text is never returned.
+
 ### OpenSLO Records (`/api/v1/openslo`)
 
 Manage Services, SLIs, SLOs, and DataSources.
@@ -434,12 +436,13 @@ Manage Services, SLIs, SLOs, and DataSources.
   - **Response**: A single OpenSlo object or 404. A record in another department returns 404.
 - **`POST /api/v1/openslo`**: Create a new OpenSLO record.
   - **Request Body**: JSON representation of an `OpenSlo` object. Required fields: `apiVersion`, `kind`, `name`, `spec`. The body must not contain an `id`.
-  - **Response**: The created record (201 Created). 400 if the body contains an `id`, with a `message` field if the SLO target is invalid; 403 if `department` is not one of the caller's departments.
+  - **Response**: The created record (201 Created). 400 if the body contains an `id`, with a `message` field if the SLO target is invalid or `slos` contains an unknown id; 403 if `department` is not one of the caller's departments; 409 if the name is already used.
 - **`PUT /api/v1/openslo/{id}`**: Update an existing record.
   - **Request Body**: JSON representation of the updated `OpenSlo` object.
-  - **Response**: The updated record. 400 with a `message` field if the SLO target is invalid. 404 if the record does not exist or is in another department. 403 if the new `department` is not one of the caller's departments; nothing is changed in that case.
+  - **Response**: The updated record. 400 with a `message` field if the SLO target is invalid, or if `slos` contains an unknown or hidden id. 404 if the record does not exist or is in another department. 403 if the new `department` is not one of the caller's departments; nothing is changed in that case. 409 if another record has the name.
+  - **Business Services**: `slos` is required and replaces the service's SLOs (see [Relationships](#relationships)). `slos: []` unlinks all of them. `lastRefreshTime` in the body is ignored.
 - **`DELETE /api/v1/openslo/{id}`**: Delete a record and its associations.
-  - **Response**: 204 No Content. 404 if the record does not exist or is in another department. 403 when deleting an AlertingSource that is used by an SLO in another department.
+  - **Response**: 204 No Content. 404 if the record does not exist or is in another department. 403 when deleting an AlertingSource that is used by an SLO in another department. 409 when the record is still in use: an SLI used by an SLO, a DataSource used by an SLI, or a Business Service that has SLOs. Nothing is deleted in that case; the message lists the links to remove first.
 - **`GET /api/v1/openslo/{id}/report`**: (SLO records only) Retrieve a comprehensive status report.
   - **Response**: `SloReport` containing current value, target, status (Healthy/Warning/Breaching/No data), and error budget. When there is no data, `currentValue` and `errorBudget` are `null`. Only SLIs visible to the caller contribute; 404 for records in another department.
 - **`GET /api/v1/openslo/{id}/service-report`**: (Service records only) Retrieve a report for all SLOs in a service.
@@ -456,6 +459,16 @@ Manage raw performance data.
 - **`POST /api/v1/metrics`**: Manually record a new metric value for an SLI.
   - **Request Body**: `SliMetric` object linking to an SLI and DataSource.
   - **Response**: The created metric (201 Created). Returns `400 Bad Request` if the value is missing, not a number, or outside 0 to 100.
+
+### Reports API (`/api/v1/reports`)
+
+- **`POST /api/v1/reports/pdf`**: Generate a PDF report for the selected records.
+  - **Request Body**: JSON with
+    - `ids` (required): at least one record id. Records you cannot see are skipped.
+    - `timeUnit` (required): `DAYS`, `MONTHS` or `YEARS`, in any letter case. There is no default.
+    - `timeValue` (optional, default `1`): an integer of at least 1. The period may be at most 10 years (3650 days, 120 months or 10 years).
+    - `include*` flags (optional, default `true`).
+  - **Response**: The PDF file (200 OK). 400 with a `message` field if `ids` is empty, `timeUnit` is missing or unknown, `timeValue` is below 1, or the period is longer than 10 years. Nothing is generated in that case.
 
 ### User Management (`/api/v1/users`)
 

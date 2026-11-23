@@ -1,6 +1,7 @@
 package com.example.meloslo.service;
 
 import com.example.meloslo.dto.ReportOptionsDTO;
+import com.example.meloslo.dto.ReportTimeUnit;
 import com.example.meloslo.model.OpenSlo;
 import com.example.meloslo.model.SliMetric;
 import com.example.meloslo.repository.MetricRepository;
@@ -116,6 +117,51 @@ class ReportServiceTest {
     }
 
     @Test
+    void nullTimeUnitFallsBackToYearsForSloAndBusinessService() throws IOException {
+        OpenSlo slo = sloWithSli(50L);
+        OpenSlo service = new OpenSlo();
+        service.setId(51L);
+        service.setKind("BusinessService");
+        service.setDisplayName("Null Unit Service");
+        service.setName("null-unit-service");
+        service.setSlos(List.of(slo));
+        when(openSloService.getRecordById(50L)).thenReturn(Optional.of(slo));
+        when(openSloService.getRecordById(51L)).thenReturn(Optional.of(service));
+        when(openSloService.getAccessibleSlos(service)).thenReturn(List.of(slo));
+        when(openSloService.parseTargetFromSpec(anyString())).thenReturn(95.0);
+        List<SliMetric> metrics = new ArrayList<>();
+        metrics.add(new SliMetric(LocalDateTime.now(), 98.0, slo.getSlis().get(0), null));
+        when(metricRepository.findBySliAndTimestampAfterOrderByTimestampDesc(any(), any())).thenReturn(metrics);
+
+        ReportOptionsDTO options = new ReportOptionsDTO();
+        options.setIds(List.of(50L, 51L));
+        options.setTimeUnit(null);
+
+        String text = pdfText(reportService.generatePdfReport(options));
+
+        assertTrue(text.contains("Agreement SLO"), text);
+        assertTrue(text.contains("Null Unit Service"), text);
+        assertTrue(text.contains("Average Performance"), text);
+    }
+
+    @Test
+    void nullIdsProduceAReadablePdfWithoutRecords() throws IOException {
+        ReportOptionsDTO options = new ReportOptionsDTO();
+        options.setIds(null);
+        options.setTimeUnit(ReportTimeUnit.DAYS);
+
+        byte[] pdf = reportService.generatePdfReport(options);
+
+        PdfReader reader = new PdfReader(pdf);
+        try {
+            assertTrue(reader.getNumberOfPages() >= 1);
+        } finally {
+            reader.close();
+        }
+        verifyNoInteractions(openSloService);
+    }
+
+    @Test
     void shouldOmitRecordsTheCallerCannotSee() throws IOException {
         // getRecordById answers empty for records outside the caller's departments
         when(openSloService.getRecordById(1L)).thenReturn(Optional.empty());
@@ -194,19 +240,19 @@ class ReportServiceTest {
         
         // Test DAYS
         options.setTimeValue(7);
-        options.setTimeUnit("DAYS");
+        options.setTimeUnit(ReportTimeUnit.DAYS);
         byte[] pdfDays = reportService.generatePdfReport(options);
         assertNotNull(pdfDays);
 
         // Test MONTHS
         options.setTimeValue(3);
-        options.setTimeUnit("MONTHS");
+        options.setTimeUnit(ReportTimeUnit.MONTHS);
         byte[] pdfMonths = reportService.generatePdfReport(options);
         assertNotNull(pdfMonths);
         
         // Test YEARS
         options.setTimeValue(2);
-        options.setTimeUnit("YEARS");
+        options.setTimeUnit(ReportTimeUnit.YEARS);
         byte[] pdfYears = reportService.generatePdfReport(options);
         assertNotNull(pdfYears);
     }
@@ -279,7 +325,7 @@ class ReportServiceTest {
         ReportOptionsDTO options = new ReportOptionsDTO();
         options.setIds(List.of(slo.getId()));
         options.setTimeValue(days);
-        options.setTimeUnit("DAYS");
+        options.setTimeUnit(ReportTimeUnit.DAYS);
         return reportService.generatePdfReport(options);
     }
 

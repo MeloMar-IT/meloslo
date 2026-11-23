@@ -7,6 +7,7 @@ import com.example.meloslo.dto.SloReport;
 import com.example.meloslo.model.OpenSlo;
 import com.example.meloslo.service.InvalidSliValueException;
 import com.example.meloslo.service.OpenSloService;
+import com.example.meloslo.service.ResourceNotFoundException;
 import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
@@ -43,74 +44,46 @@ public class OpenSloController {
 
     @GetMapping("/{id}")
     public ResponseEntity<OpenSlo> getRecordById(@PathVariable Long id) {
-        return service.getRecordById(id)
-                .map(ResponseEntity::ok)
-                .orElse(ResponseEntity.notFound().build());
+        return ResponseEntity.ok(service.getRecordById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("OpenSLO record not found with id " + id)));
     }
 
     @GetMapping("/{id}/report")
     public ResponseEntity<SloReport> getSloReport(@PathVariable Long id) {
-        try {
-            return ResponseEntity.ok(service.getSloReport(id));
-        } catch (RuntimeException e) {
-            return ResponseEntity.notFound().build();
-        }
+        return ResponseEntity.ok(service.getSloReport(id));
     }
 
     @GetMapping("/{id}/service-report")
     public ResponseEntity<BusinessServiceReport> getServiceReport(@PathVariable Long id) {
-        try {
-            return ResponseEntity.ok(service.getServiceReport(id));
-        } catch (RuntimeException e) {
-            return ResponseEntity.notFound().build();
-        }
+        return ResponseEntity.ok(service.getServiceReport(id));
     }
 
     @GetMapping("/{id}/sli-report")
     public ResponseEntity<SliReport> getSliReport(@PathVariable Long id) {
-        try {
-            return ResponseEntity.ok(service.getSliReport(id));
-        } catch (RuntimeException e) {
-            return ResponseEntity.notFound().build();
-        }
+        return ResponseEntity.ok(service.getSliReport(id));
     }
 
     @PostMapping
     public ResponseEntity<OpenSlo> createRecord(@Valid @RequestBody OpenSlo record) {
-        try {
-            OpenSlo created = service.createRecord(record);
-            return new ResponseEntity<>(created, HttpStatus.CREATED);
-        } catch (AccessDeniedException e) {
-            return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
-        } catch (IllegalArgumentException e) {
-            return ResponseEntity.badRequest().build();
-        }
+        return new ResponseEntity<>(service.createRecord(record), HttpStatus.CREATED);
     }
 
     @PutMapping("/{id}")
     public ResponseEntity<OpenSlo> updateRecord(@PathVariable Long id, @Valid @RequestBody OpenSlo record) {
-        try {
-            OpenSlo updated = service.updateRecord(id, record);
-            return ResponseEntity.ok(updated);
-        } catch (AccessDeniedException e) {
-            return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
-        } catch (InvalidSliValueException e) {
-            throw e;
-        } catch (RuntimeException e) {
-            return ResponseEntity.notFound().build();
-        }
+        return ResponseEntity.ok(service.updateRecord(id, record));
     }
 
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> deleteRecord(@PathVariable Long id) {
-        try {
-            service.deleteRecord(id);
-            return ResponseEntity.noContent().build();
-        } catch (AccessDeniedException e) {
-            return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
-        } catch (RuntimeException e) {
-            return ResponseEntity.notFound().build();
-        }
+        service.deleteRecord(id);
+        return ResponseEntity.noContent().build();
+    }
+
+    /** Maps a refused department access to 403. Kept local so Spring Security's 401 for anonymous callers stays intact. */
+    @ExceptionHandler(AccessDeniedException.class)
+    public ResponseEntity<ApiExceptionHandler.ApiError> handleAccessDenied(AccessDeniedException e) {
+        return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                .body(ApiExceptionHandler.ApiError.of(HttpStatus.FORBIDDEN, e.getMessage()));
     }
 
     /** Maps a refused SLO target or SLI value to 400 Bad Request with a {@code message} field. */
