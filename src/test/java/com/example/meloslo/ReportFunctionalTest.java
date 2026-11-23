@@ -1,6 +1,7 @@
 package com.example.meloslo;
 
 import com.example.meloslo.dto.ReportOptionsDTO;
+import com.example.meloslo.dto.ReportTimeUnit;
 import com.example.meloslo.service.ReportService;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.mock.mockito.MockBean;
@@ -27,6 +28,7 @@ public class ReportFunctionalTest extends BaseFunctionalTest {
         ReportOptionsDTO options = new ReportOptionsDTO();
         options.setIds(Collections.singletonList(1L));
         options.setIncludeMetadata(true);
+        options.setTimeUnit(ReportTimeUnit.YEARS);
 
         ResponseEntity<byte[]> response = userAuth().postForEntity("/api/v1/reports/pdf", options, byte[].class);
 

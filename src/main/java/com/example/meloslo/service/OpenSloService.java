@@ -63,7 +63,7 @@ public class OpenSloService {
     private OpenSlo findAccessibleOrThrow(Long id, AccessScope scope) {
         return repository.findById(id)
                 .filter(scope::canAccess)
-                .orElseThrow(() -> new RuntimeException("OpenSLO record not found with id " + id));
+                .orElseThrow(() -> new ResourceNotFoundException("OpenSLO record not found with id " + id));
     }
 
     private List<OpenSlo> visible(List<OpenSlo> records, AccessScope scope) {
@@ -201,13 +201,105 @@ public class OpenSloService {
     public OpenSlo createRecord(OpenSlo record) {
         validateSloTarget(record);
         if (record.getId() != null) {
-            throw new IllegalArgumentException("A new record must not have an id");
+            throw new BadRequestException("A new record must not have an id");
         }
         AccessScope scope = accessService.currentScope();
         if (!scope.canAssign(record.getDepartment())) {
             throw new AccessDeniedException("You can only create records in your own departments");
         }
-        return redactor.redact(repository.save(record), scope);
+        // System-managed fields are never taken from the request
+        record.setLastRefreshTime(null);
+        record.setLastAlertTime(null);
+        record.setLastFetchFailureTime(null);
+        record.setLastFetchError(null);
+        assertNameUnique(record.getName(), null);
+        List<OpenSlo> requestedSlos = record.getSlos();
+        record.setSlos(new ArrayList<>());
+        OpenSlo saved = repository.save(record);
+        syncServiceSlos(saved, requestedSlos, scope);
+        return redactor.redact(saved, scope);
+    }
+
+    private void assertNameUnique(String name, Long selfId) {
+        if (name == null) {
+            return;
+        }
+        repository.findByName(name)
+                .filter(other -> !other.getId().equals(selfId))
+                .ifPresent(other -> {
+                    throw new ConflictException("A record named '" + name + "' already exists");
+                });
+    }
+
+    /**
+     * Makes the SLOs of a Business Service match the requested list through the owning side
+     * ({@code SLO.service}). SLOs the caller cannot access are never linked, unlinked or revealed.
+     * Other kinds ignore the list.
+     */
+    private void syncServiceSlos(OpenSlo service, List<OpenSlo> requested, AccessScope scope) {
+        if (!"BusinessService".equalsIgnoreCase(service.getKind())) {
+            return;
+        }
+        if (requested == null) {
+            throw new BadRequestException("slos must not be null");
+        }
+        Map<Long, OpenSlo> wanted = new java.util.LinkedHashMap<>();
+        List<Long> ids = new ArrayList<>();
+        for (OpenSlo entry : requested) {
+            if (entry == null || entry.getId() == null) {
+                throw new BadRequestException("slos must only contain records with an id");
+            }
+            if (!ids.contains(entry.getId())) {
+                ids.add(entry.getId());
+            }
+        }
+        for (OpenSlo found : repository.findAllById(ids)) {
+            if (!scope.canAccess(found)) {
+                continue;
+            }
+            if (!"SLO".equalsIgnoreCase(found.getKind())) {
+                throw new BadRequestException("Record " + found.getId() + " is not an SLO");
+            }
+            wanted.put(found.getId(), found);
+        }
+        for (Long id : ids) {
+            if (!wanted.containsKey(id)) {
+                throw new BadRequestException("Unknown SLO id " + id);
+            }
+        }
+        for (OpenSlo current : repository.findByService(service)) {
+            if (scope.canAccess(current) && !wanted.containsKey(current.getId())) {
+                current.setService(null);
+                repository.save(current);
+            }
+        }
+        for (OpenSlo slo : wanted.values()) {
+            if (slo.getService() == null || !service.getId().equals(slo.getService().getId())) {
+                slo.setService(service);
+                repository.save(slo);
+            }
+        }
+        service.setSlos(repository.findByService(service));
+    }
+
+    private void assertNotInUse(OpenSlo record) {
+        List<String> reasons = new ArrayList<>();
+        long asSli = repository.countSlosUsingSli(record.getId());
+        if (asSli > 0) {
+            reasons.add("used as an SLI by " + asSli + " SLO(s)");
+        }
+        long asService = repository.countByService(record);
+        if (asService > 0) {
+            reasons.add("is the business service of " + asService + " SLO(s)");
+        }
+        long asDatasource = repository.countByDatasource(record);
+        if (asDatasource > 0) {
+            reasons.add("is the data source of " + asDatasource + " SLI(s)");
+        }
+        if (!reasons.isEmpty()) {
+            throw new ConflictException("Cannot delete '" + record.getName() + "': "
+                    + String.join("; ", reasons) + ". Remove those links first.");
+        }
     }
 
     @Transactional
@@ -218,6 +310,7 @@ public class OpenSloService {
         if (!scope.canAssign(updatedRecord.getDepartment())) {
             throw new AccessDeniedException("You can only assign records to your own departments");
         }
+        assertNameUnique(updatedRecord.getName(), record.getId());
         record.setApiVersion(updatedRecord.getApiVersion());
         record.setKind(updatedRecord.getKind());
         record.setName(updatedRecord.getName());
@@ -226,21 +319,22 @@ public class OpenSloService {
         record.setDepartment(updatedRecord.getDepartment());
         record.setManager(updatedRecord.getManager());
         record.setRefreshRate(updatedRecord.getRefreshRate());
-        record.setLastRefreshTime(updatedRecord.getLastRefreshTime());
         record.setAlertUrl(updatedRecord.getAlertUrl());
         record.setAlertPayload(updatedRecord.getAlertPayload());
         record.setAlertingSource(updatedRecord.getAlertingSource());
         record.setService(updatedRecord.getService());
         record.setDatasource(updatedRecord.getDatasource());
         record.setSlis(updatedRecord.getSlis());
-        record.setSlos(updatedRecord.getSlos());
-        return redactor.redact(repository.save(record), scope);
+        OpenSlo saved = repository.save(record);
+        syncServiceSlos(saved, updatedRecord.getSlos(), scope);
+        return redactor.redact(saved, scope);
     }
 
     @Transactional
     public void deleteRecord(Long id) {
         AccessScope scope = accessService.currentScope();
         OpenSlo record = findAccessibleOrThrow(id, scope);
+        assertNotInUse(record);
 
         // Deleting an AlertingSource unlinks the SLOs that use it. Check every dependent before
         // changing anything, so a restricted caller cannot modify another department's SLO.
@@ -284,7 +378,7 @@ public class OpenSloService {
         OpenSlo sli = findAccessibleOrThrow(id, scope);
 
         if (!"SLI".equalsIgnoreCase(sli.getKind())) {
-            throw new RuntimeException("Record is not of kind SLI");
+            throw new ResourceNotFoundException("Record " + id + " is not of kind SLI");
         }
 
         List<SliMetric> allMetrics = metricRepository.findBySliOrderByTimestampDesc(sli);
@@ -319,7 +413,7 @@ public class OpenSloService {
         OpenSlo slo = findAccessibleOrThrow(id, scope);
 
         if (!"SLO".equalsIgnoreCase(slo.getKind())) {
-            throw new RuntimeException("Record is not of kind SLO");
+            throw new ResourceNotFoundException("Record " + id + " is not of kind SLO");
         }
 
         return calculateSloReport(slo, scope);
@@ -468,7 +562,7 @@ public class OpenSloService {
         OpenSlo service = findAccessibleOrThrow(id, scope);
 
         if (!"BusinessService".equalsIgnoreCase(service.getKind())) {
-            throw new RuntimeException("Record is not of kind BusinessService");
+            throw new ResourceNotFoundException("Record " + id + " is not of kind BusinessService");
         }
 
         List<SloReport> sloReports = new ArrayList<>();

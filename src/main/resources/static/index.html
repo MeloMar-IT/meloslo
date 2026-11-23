@@ -2416,7 +2416,7 @@ spec:
                             window.URL.revokeObjectURL(url);
                             showNotification('success', 'Report generated successfully!');
                         } else {
-                            showNotification('error', 'Failed to generate report.');
+                            showNotification('error', await readError(response, 'Failed to generate report.'));
                         }
                     } catch (err) {
                         console.error('Error generating report:', err);
@@ -2503,7 +2503,7 @@ spec:
                             closeModal();
                             fetchRecords();
                         } else {
-                            showNotification('error', 'Failed to save record');
+                            showNotification('error', await readError(response, 'Failed to save record'));
                         }
                     } catch (err) {
                         showNotification('error', 'An error occurred');
@@ -2524,6 +2524,8 @@ spec:
                             if (selectedSlo.value && selectedSlo.value.id === id) {
                                 currentView.value = 'dashboard';
                             }
+                        } else {
+                            showNotification('error', await readError(response, 'Failed to delete record'));
                         }
                     } catch (err) {
                         showNotification('error', 'Failed to delete record');
@@ -2602,6 +2604,15 @@ spec:
                     if (status === 'Healthy') return 'text-green-600';
                     if (status === 'Warning') return 'text-yellow-600';
                     return 'text-red-600';
+                };
+
+                const readError = async (response, fallback) => {
+                    try {
+                        const b = await response.json();
+                        return b && b.message ? b.message : fallback;
+                    } catch (e) {
+                        return fallback;
+                    }
                 };
 
                 const showNotification = (type, message) => {
